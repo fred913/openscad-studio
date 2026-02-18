@@ -13,6 +13,9 @@
     "type-check": "pnpm -r type-check",
     "format": "pnpm format:ts && pnpm format:rust",
     "format:ts": "prettier --write \"apps/**/*.{ts,tsx,js,jsx,json,css}\" \"packages/**/*.{ts,tsx,js,jsx,json}\"",
+    "web:dev": "cd apps/web && pnpm dev",
+    "web:build": "cd apps/web && pnpm build",
+    "web:preview": "cd apps/web && pnpm preview",
     "format:rust": "cd apps/ui/src-tauri && cargo fmt",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,js,jsx,json,css}\" \"packages/**/*.{ts,tsx,js,jsx,json}\" && cd apps/ui/src-tauri && cargo fmt --check"
   },

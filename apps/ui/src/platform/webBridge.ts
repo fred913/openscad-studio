@@ -6,6 +6,37 @@ import type {
   ConfirmDialogOptions,
 } from './types';
 
+// File System Access API type declarations (not yet in standard DOM lib)
+interface PickerAcceptType {
+  description?: string;
+  accept: Record<string, string[]>;
+}
+
+interface FilePickerOptions {
+  types?: PickerAcceptType[];
+  multiple?: boolean;
+  suggestedName?: string;
+}
+
+interface FileSystemFileHandle {
+  getFile(): Promise<File>;
+  createWritable(): Promise<FileSystemWritableFileStream>;
+  readonly name: string;
+}
+
+interface FileSystemWritableFileStream extends WritableStream {
+  write(data: BufferSource | Blob | string): Promise<void>;
+  close(): Promise<void>;
+}
+
+declare global {
+  interface Window {
+    showOpenFilePicker(options?: FilePickerOptions): Promise<FileSystemFileHandle[]>;
+    showSaveFilePicker(options?: FilePickerOptions): Promise<FileSystemFileHandle>;
+    __closeHandler?: () => Promise<boolean>;
+  }
+}
+
 const capabilities: PlatformCapabilities = {
   multiFile: false,
   hasNativeMenu: false,
@@ -38,10 +69,10 @@ export class WebBridge implements PlatformBridge {
 
   private async fileOpenNative(filters?: FileFilter[]): Promise<FileOpenResult | null> {
     try {
-      const types: FilePickerAcceptType[] = filters?.length
+      const types: PickerAcceptType[] = filters?.length
         ? filters.map((f) => ({
             description: f.name,
-            accept: { 'text/plain': f.extensions.map((ext) => `.${ext}` as `.${string}`) },
+            accept: { 'text/plain': f.extensions.map((ext) => `.${ext}`) },
           }))
         : [];
 
@@ -97,10 +128,10 @@ export class WebBridge implements PlatformBridge {
 
   private async fileSaveNative(content: string, filters?: FileFilter[]): Promise<string | null> {
     try {
-      const types: FilePickerAcceptType[] = filters?.length
+      const types: PickerAcceptType[] = filters?.length
         ? filters.map((f) => ({
             description: f.name,
-            accept: { 'text/plain': f.extensions.map((ext) => `.${ext}` as `.${string}`) },
+            accept: { 'text/plain': f.extensions.map((ext) => `.${ext}`) },
           }))
         : [];
 
@@ -125,11 +156,11 @@ export class WebBridge implements PlatformBridge {
   ): Promise<void> {
     if (hasFileSystemAccess()) {
       try {
-        const types: FilePickerAcceptType[] = filters?.length
+        const types: PickerAcceptType[] = filters?.length
           ? filters.map((f) => ({
               description: f.name,
               accept: {
-                'application/octet-stream': f.extensions.map((ext) => `.${ext}` as `.${string}`),
+                'application/octet-stream': f.extensions.map((ext) => `.${ext}`),
               },
             }))
           : [];
@@ -177,11 +208,11 @@ export class WebBridge implements PlatformBridge {
     };
 
     window.addEventListener('beforeunload', beforeUnload);
-    (window as Record<string, unknown>).__closeHandler = handler;
+    window.__closeHandler = handler;
 
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
-      delete (window as Record<string, unknown>).__closeHandler;
+      delete window.__closeHandler;
     };
   }
 

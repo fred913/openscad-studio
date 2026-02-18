@@ -7,6 +7,7 @@ import type { AiPromptPanelRef } from './components/AiPromptPanel';
 import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
 import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen';
 import { TabBar, type Tab } from './components/TabBar';
+import { WebMenuBar } from './components/WebMenuBar';
 import { Button } from './components/ui';
 import { panelComponents, tabComponents, WorkspaceTab } from './components/panels/PanelComponents';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
@@ -20,6 +21,7 @@ import {
 } from './stores/layoutStore';
 import { useOpenScad } from './hooks/useOpenScad';
 import { useAiAgent } from './hooks/useAiAgent';
+import { useHistory } from './hooks/useHistory';
 import { getPlatform, eventBus, type ExportFormat } from './platform';
 import { RenderService } from './services/renderService';
 import { useSettings, loadSettings } from './stores/settingsStore';
@@ -66,6 +68,8 @@ function App() {
     undefined
   );
   const [settings] = useSettings();
+  const { capabilities } = getPlatform();
+  const { undo, redo } = useHistory();
 
   const {
     source,
@@ -84,6 +88,17 @@ function App() {
     autoRenderOnIdle: settings.editor.autoRenderOnIdle,
     autoRenderDelayMs: settings.editor.autoRenderDelayMs,
   });
+
+  const handleUndo = useCallback(async () => {
+    const checkpoint = await undo();
+    if (checkpoint) updateSource(checkpoint.code);
+  }, [undo, updateSource]);
+
+  const handleRedo = useCallback(async () => {
+    const checkpoint = await redo();
+    if (checkpoint) updateSource(checkpoint.code);
+  }, [redo, updateSource]);
+
   const aiPromptPanelRef = useRef<AiPromptPanelRef>(null);
 
   // AI Agent state
@@ -674,7 +689,7 @@ function App() {
     );
 
     unlistenFns.push(
-      eventBus.on('menu:file:export', async (format) => {
+      eventBus.on('menu:file:export', async (format: ExportFormat) => {
         try {
           const formatLabels: Record<ExportFormat, { label: string; ext: string }> = {
             stl: { label: 'STL (3D Model)', ext: 'stl' },
@@ -917,15 +932,33 @@ function App() {
           borderBottom: '1px solid var(--border-subtle)',
         }}
       >
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <TabBar
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onTabClick={switchTab}
-            onTabClose={closeTab}
-            onNewTab={() => createNewTab()}
-            onReorderTabs={reorderTabs}
+        {/* Web menu bar (web only — no native menu) */}
+        {!capabilities.hasNativeMenu && (
+          <WebMenuBar
+            onExport={() => setShowExportDialog(true)}
+            onSettings={() => setShowSettingsDialog(true)}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
           />
+        )}
+
+        {/* Tab bar (multi-file / Tauri) or filename label (single-file / web) */}
+        <div className="flex-1 min-w-0 overflow-hidden">
+          {capabilities.multiFile ? (
+            <TabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onTabClick={switchTab}
+              onTabClose={closeTab}
+              onNewTab={() => createNewTab()}
+              onReorderTabs={reorderTabs}
+            />
+          ) : (
+            <div className="px-3 py-1 text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
+              {activeTab.name}
+              {activeTab.isDirty ? ' •' : ''}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 px-3 shrink-0">
