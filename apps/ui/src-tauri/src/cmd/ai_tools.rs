@@ -103,8 +103,28 @@ pub async fn get_preview_screenshot(
         let path = state.last_preview_path.lock().unwrap().clone();
         if path.is_empty() {
             Ok("No preview available yet. Trigger a render first.".to_string())
-        } else {
+        } else if path.ends_with(".png") || path.ends_with(".svg") || path.ends_with(".jpg") {
             Ok(path)
+        } else {
+            // last_preview_path is a non-image file (e.g. STL from mesh render).
+            // Re-render as PNG so the AI and UI can actually display it.
+            let code = state.current_code.lock().unwrap().clone();
+            let openscad_path = state.openscad_path.lock().unwrap().clone();
+            let working_dir = state.working_dir.lock().unwrap().clone();
+
+            if code.is_empty() {
+                return Err("No code to render. Add some OpenSCAD code first.".to_string());
+            }
+
+            let png_path = render_with_view(
+                app,
+                openscad_path,
+                code,
+                CameraView::FrontRight,
+                working_dir,
+            )
+            .await?;
+            Ok(png_path)
         }
     }
 }
