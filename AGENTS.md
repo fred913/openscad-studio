@@ -557,6 +557,12 @@ Logs appear in browser DevTools console
 3. **Parallel tool execution**: Execute independent tools concurrently
 4. **Streaming optimizations**: Reduce event emission frequency
 
+## Fix philosophy
+
+- **Never apply a quick fix if it's not the architecturally correct fix.** A band-aid that papers over a design problem is worse than no fix at all — it adds complexity and makes the real fix harder later.
+- When you identify that the correct solution requires a larger refactor, **always surface this to the user**. Explain what the right architecture looks like, why the simple fix is insufficient, and ask whether we should proceed with the refactor instead.
+- Prefer doing things right over doing things fast. A well-designed solution that takes longer is always preferable to a hacky shortcut.
+
 ---
 
 **Last Updated**: 2025-10-18
