@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-0.4.0-blue.svg" alt="Version">
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
+  <img src="https://img.shields.io/badge/license-GPL--2.0-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/Tauri-2.0-24C8DB.svg" alt="Tauri">
   <img src="https://img.shields.io/badge/React-19-61DAFB.svg" alt="React">
   <img src="https://img.shields.io/badge/Rust-1.82+-000000.svg" alt="Rust">
@@ -41,16 +41,17 @@ As a software engineer and maker hobbyist, I love OpenSCAD. It allows for precis
 - ⚙️ **Customizer panel** - Interactive controls for OpenSCAD parameters with auto-rendering
 - 🌈 **22+ themes** - Popular themes like Catppuccin, Dracula, One Dark Pro, GitHub, Nord, Tokyo Night, and more
 
-**Limitations:** Special operators (!, #, %, *) preview not yet implemented
+**Limitations:** Special operators (!, #, %, \*) preview not yet implemented
 
 ## 📦 Installation
 
 ### Prerequisites
 
 1. The **opescad** cli binary must be installed and available in your PATH. You can install via package manager:
-  - macOS: `brew install openscad`
-  - Ubuntu: `sudo apt install openscad`
-  - Windows: Download installer from website
+
+- macOS: `brew install openscad`
+- Ubuntu: `sudo apt install openscad`
+- Windows: Download installer from website
 
 2. For development, you'll need:
    - **Node.js** 18+ and **pnpm**
@@ -111,10 +112,11 @@ The AI copilot uses a native Rust implementation with direct API integration and
 **Supported Providers:**
 All models from the following providers are supported:
 
-- Anthropic 
+- Anthropic
 - OpenAI
 
 The AI can:
+
 - View your current code and preview
 - Make targeted code changes with exact string replacement
 - Check for compilation errors
@@ -148,11 +150,14 @@ For detailed development guidelines, see [CLAUDE.md](CLAUDE.md).
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) for details.
+This project is licensed under the GNU General Public License v2.0 - see [LICENSE](LICENSE) for details.
+
+This license change was made to comply with OpenSCAD's GPL-2.0 license, as the project now bundles openscad-wasm.
 
 ## 🙏 Acknowledgments
 
 Built with:
+
 - [Tauri](https://tauri.app/) - Rust-powered desktop framework
 - [React](https://react.dev/) - UI framework
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) - Code editor

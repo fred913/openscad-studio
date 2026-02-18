@@ -1,84 +1,27 @@
-mod ai_agent;
 mod cmd;
 mod history;
 mod types;
-mod utils;
 
-use ai_agent::{cancel_ai_stream, send_ai_query, start_ai_agent, stop_ai_agent, AiAgentState};
-use cmd::{
-    apply_edit, clear_api_key, delete_conversation, detect_backend, fetch_models, get_ai_model,
-    get_ai_provider, get_api_key, get_available_providers, get_cached_models, get_current_code,
-    get_diagnostics, get_preview_screenshot, has_api_key, load_conversations, locate_openscad,
-    render_exact, render_preview, save_conversation, set_ai_model, store_api_key, trigger_render,
-    update_editor_state, update_openscad_path, update_working_dir, validate_edit, validate_model,
-    EditorState,
-};
+use cmd::{update_editor_state, update_working_dir, EditorState};
 use history::HistoryState;
-use std::sync::Arc;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
-use utils::cache::RenderCache;
-
-pub struct AppState {
-    pub render_cache: Arc<RenderCache>,
-}
-
-pub struct AppStates {
-    pub app_state: AppState,
-    pub editor_state: EditorState,
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_state = AppState {
-        render_cache: Arc::new(RenderCache::new()),
-    };
     let editor_state = EditorState::default();
-    let ai_agent_state = AiAgentState::new();
     let history_state = HistoryState::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-        .manage(app_state)
         .manage(editor_state)
-        .manage(ai_agent_state)
         .manage(history_state)
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
-            locate_openscad,
-            render_preview,
-            render_exact,
-            detect_backend,
-            store_api_key,
-            get_api_key,
-            get_ai_provider,
-            get_available_providers,
-            clear_api_key,
-            has_api_key,
-            get_current_code,
             update_editor_state,
-            update_openscad_path,
             update_working_dir,
-            get_preview_screenshot,
-            validate_edit,
-            apply_edit,
-            get_diagnostics,
-            trigger_render,
-            start_ai_agent,
-            stop_ai_agent,
-            get_ai_model,
-            set_ai_model,
-            send_ai_query,
-            cancel_ai_stream,
-            save_conversation,
-            load_conversations,
-            delete_conversation,
-            fetch_models,
-            get_cached_models,
-            validate_model,
             cmd::history::create_checkpoint,
             cmd::history::undo,
             cmd::history::redo,
