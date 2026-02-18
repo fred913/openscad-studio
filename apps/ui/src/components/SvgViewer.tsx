@@ -40,7 +40,7 @@ export function SvgViewer({ src }: SvgViewerProps) {
 
         // Get viewBox to determine axis length and origin
         const viewBox = svgElement.getAttribute('viewBox');
-        console.log('[SvgViewer] Original viewBox:', viewBox);
+        if (import.meta.env.DEV) console.log('[SvgViewer] Original viewBox:', viewBox);
 
         let width = 10,
           height = 10,
@@ -52,7 +52,7 @@ export function SvgViewer({ src }: SvgViewerProps) {
           minY = y;
           width = w;
           height = h;
-          console.log('[SvgViewer] ViewBox parsed:', { x, y, width, height });
+          if (import.meta.env.DEV) console.log('[SvgViewer] ViewBox parsed:', { x, y, width, height });
         }
 
         // Calculate stroke width relative to viewBox (very thin axes)
@@ -134,28 +134,10 @@ export function SvgViewer({ src }: SvgViewerProps) {
         svgElement.insertBefore(axesGroup, svgElement.firstChild);
 
         const finalSvg = new XMLSerializer().serializeToString(svgElement);
-        console.log('[SvgViewer] Final SVG length:', finalSvg.length);
-        console.log('[SvgViewer] Axes group added:', axesGroup.childNodes.length, 'elements');
-        console.log('[SvgViewer] Axis details:', {
-          xAxis: {
-            x1: xAxis.getAttribute('x1'),
-            y1: xAxis.getAttribute('y1'),
-            x2: xAxis.getAttribute('x2'),
-            y2: xAxis.getAttribute('y2'),
-            stroke: xAxis.getAttribute('stroke'),
-            width: xAxis.getAttribute('stroke-width'),
-          },
-          yAxis: {
-            x1: yAxis.getAttribute('x1'),
-            y1: yAxis.getAttribute('y1'),
-            x2: yAxis.getAttribute('x2'),
-            y2: yAxis.getAttribute('y2'),
-            stroke: yAxis.getAttribute('stroke'),
-            width: yAxis.getAttribute('stroke-width'),
-          },
-        });
-        console.log('[SvgViewer] First 1000 chars of SVG:', finalSvg.substring(0, 1000));
-        console.log('[SvgViewer] SVG contains axes group?', finalSvg.includes('coordinate-axes'));
+        if (import.meta.env.DEV) {
+          console.log('[SvgViewer] Final SVG length:', finalSvg.length);
+          console.log('[SvgViewer] Axes group added:', axesGroup.childNodes.length, 'elements');
+        }
 
         setSvgContent(finalSvg);
       } catch (err) {

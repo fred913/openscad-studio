@@ -70,7 +70,7 @@ export function CustomizerPanel({ code, onChange }: CustomizerPanelProps) {
         // Trigger a render after updating the code
         try {
           await emit('render-requested');
-          console.log('[Customizer] Triggered render after parameter change:', param.name);
+          if (import.meta.env.DEV) console.log('[Customizer] Triggered render after parameter change:', param.name);
         } catch (err) {
           console.error('[Customizer] Failed to emit render-requested event:', err);
         }

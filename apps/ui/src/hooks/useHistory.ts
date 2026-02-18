@@ -38,7 +38,7 @@ export function useHistory() {
 
     const setupListener = async () => {
       unlisten = await listen<EditorCheckpoint>('history:restore', (event) => {
-        console.log('[useHistory] Received history:restore event:', event.payload);
+        if (import.meta.env.DEV) console.log('[useHistory] Received history:restore event:', event.payload);
         // State will be updated by refreshing can_undo/can_redo
         refreshHistoryState();
       });

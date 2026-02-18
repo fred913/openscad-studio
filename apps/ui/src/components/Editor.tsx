@@ -72,7 +72,7 @@ export function Editor({
 
       // Initialize vim mode
       if (!vimModeRef.current) {
-        console.log('[Editor] Initializing vim mode');
+        if (import.meta.env.DEV) console.log('[Editor] Initializing vim mode');
         vimModeRef.current = initVimMode(editorRef.current, statusBarRef.current);
       }
 
@@ -85,7 +85,7 @@ export function Editor({
     } else {
       // Dispose vim mode if it exists
       if (vimModeRef.current) {
-        console.log('[Editor] Disposing vim mode');
+        if (import.meta.env.DEV) console.log('[Editor] Disposing vim mode');
         vimModeRef.current.dispose();
         vimModeRef.current = null;
       }
@@ -105,23 +105,19 @@ export function Editor({
     let unlisten: (() => void) | null = null;
 
     const setupListener = async () => {
-      console.log('[Editor] Setting up code-updated listener');
+      if (import.meta.env.DEV) console.log('[Editor] Setting up code-updated listener');
       unlisten = await listen<string>('code-updated', (event) => {
-        console.log(
-          '[Editor] ✅ Received code-updated event, payload length:',
-          event.payload.length
-        );
-        console.log('[Editor] Calling onChange with new code');
+        if (import.meta.env.DEV) console.log('[Editor] Received code-updated event, payload length:', event.payload.length);
         onChange(event.payload);
       });
-      console.log('[Editor] code-updated listener setup complete');
+      if (import.meta.env.DEV) console.log('[Editor] code-updated listener setup complete');
     };
 
     setupListener();
 
     return () => {
       if (unlisten) {
-        console.log('[Editor] Cleaning up code-updated listener');
+        if (import.meta.env.DEV) console.log('[Editor] Cleaning up code-updated listener');
         unlisten();
       }
     };
@@ -215,7 +211,7 @@ export function Editor({
 
     // Add keyboard shortcut for save (Cmd+S / Ctrl+S)
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, async () => {
-      console.log('[Editor] Save triggered via Cmd+S');
+      if (import.meta.env.DEV) console.log('[Editor] Save triggered via Cmd+S');
       // Emit the save event so App.tsx can handle formatting and file save
       const { emit } = await import('@tauri-apps/api/event');
       await emit('menu:file:save');

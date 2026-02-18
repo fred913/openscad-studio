@@ -10,12 +10,14 @@ interface PreviewProps {
 }
 
 export function Preview({ src, kind, isRendering, error }: PreviewProps) {
-  console.log('[Preview] Render:', {
-    src: src?.substring(0, 80),
-    kind,
-    isRendering,
-    hasError: !!error,
-  });
+  if (import.meta.env.DEV) {
+    console.log('[Preview] Render:', {
+      src: src?.substring(0, 80),
+      kind,
+      isRendering,
+      hasError: !!error,
+    });
+  }
 
   if (error) {
     return (

@@ -199,7 +199,7 @@ export function useAiAgent() {
         availableProviders: providers,
       }));
 
-      console.log('[useAiAgent] Loaded model:', model, 'Available providers:', providers);
+      if (import.meta.env.DEV) console.log('[useAiAgent] Loaded model:', model, 'Available providers:', providers);
     } catch (err) {
       console.error('Failed to load model and providers:', err);
     }
@@ -216,9 +216,9 @@ export function useAiAgent() {
     let unlisten: (() => void) | null = null;
 
     const setupListener = async () => {
-      console.log('[useAiAgent] Setting up ai-stream event listener');
+      if (import.meta.env.DEV) console.log('[useAiAgent] Setting up ai-stream event listener');
       unlisten = await listen<StreamEvent>('ai-stream', (event) => {
-        console.log('[useAiAgent] Received ai-stream event:', event.payload);
+        if (import.meta.env.DEV) console.log('[useAiAgent] Received ai-stream event:', event.payload);
         const payload = event.payload;
 
         switch (payload.type) {
@@ -226,14 +226,14 @@ export function useAiAgent() {
             if (payload.content) {
               // Deduplicate: ignore if this is the same as the last chunk
               if (payload.content === lastChunkRef.current) {
-                console.log('[useAiAgent] Skipping duplicate chunk');
+                if (import.meta.env.DEV) console.log('[useAiAgent] Skipping duplicate chunk');
                 break;
               }
               lastChunkRef.current = payload.content;
 
               // If we were in tool mode, flush the tools first
               if (lastModeRef.current === 'tool' && currentToolCallsRef.current.length > 0) {
-                console.log('[useAiAgent] Switching from tool to text mode, flushing tools');
+                if (import.meta.env.DEV) console.log('[useAiAgent] Switching from tool to text mode, flushing tools');
                 // Add completed tools as permanent messages
                 const toolMessages = currentToolCallsRef.current.map((tool) => ({
                   type: 'tool-call' as const,
@@ -279,11 +279,11 @@ export function useAiAgent() {
 
           case 'tool-call': {
             if (payload.toolName) {
-              console.log('[useAiAgent] Tool call:', payload.toolName);
+              if (import.meta.env.DEV) console.log('[useAiAgent] Tool call:', payload.toolName);
 
               // If we were in text mode, flush the text first
               if (lastModeRef.current === 'text' && streamBufferRef.current.trim()) {
-                console.log('[useAiAgent] Switching from text to tool mode, flushing text');
+                if (import.meta.env.DEV) console.log('[useAiAgent] Switching from text to tool mode, flushing text');
                 const assistantMessage: AssistantMessage = {
                   type: 'assistant',
                   id: crypto.randomUUID(),
@@ -318,17 +318,19 @@ export function useAiAgent() {
 
           case 'tool-result': {
             if (payload.toolName) {
-              console.log('[useAiAgent] Tool result:', payload.toolName);
+              if (import.meta.env.DEV) console.log('[useAiAgent] Tool result:', payload.toolName);
 
               // Check for checkpoint marker in result (from apply_edit tool)
               if (payload.result && typeof payload.result === 'string') {
                 const checkpointMatch = payload.result.match(/\[CHECKPOINT:([\w-]+)\]/);
                 if (checkpointMatch) {
                   pendingCheckpointIdRef.current = checkpointMatch[1];
-                  console.log(
-                    '[useAiAgent] Extracted checkpoint ID from tool result:',
-                    pendingCheckpointIdRef.current
-                  );
+                  if (import.meta.env.DEV) {
+                    console.log(
+                      '[useAiAgent] Extracted checkpoint ID from tool result:',
+                      pendingCheckpointIdRef.current
+                    );
+                  }
                 }
               }
 
@@ -359,10 +361,12 @@ export function useAiAgent() {
             break;
 
           case 'done': {
-            console.log('[useAiAgent] ===== DONE EVENT RECEIVED =====');
-            console.log('[useAiAgent] streamBufferRef.current:', streamBufferRef.current);
-            console.log('[useAiAgent] currentToolCallsRef.current:', currentToolCallsRef.current);
-            console.log('[useAiAgent] lastModeRef.current:', lastModeRef.current);
+            if (import.meta.env.DEV) {
+              console.log('[useAiAgent] ===== DONE EVENT RECEIVED =====');
+              console.log('[useAiAgent] streamBufferRef.current:', streamBufferRef.current);
+              console.log('[useAiAgent] currentToolCallsRef.current:', currentToolCallsRef.current);
+              console.log('[useAiAgent] lastModeRef.current:', lastModeRef.current);
+            }
 
             // Capture ref values before resetting
             const finalStreamBuffer = streamBufferRef.current;
@@ -370,17 +374,19 @@ export function useAiAgent() {
 
             // Flush any remaining content
             setState((prev) => {
-              console.log(
-                '[useAiAgent] Current messages count before flush:',
-                prev.messages.length
-              );
-              console.log('[useAiAgent] Current streamingResponse:', prev.streamingResponse);
+              if (import.meta.env.DEV) {
+                console.log(
+                  '[useAiAgent] Current messages count before flush:',
+                  prev.messages.length
+                );
+                console.log('[useAiAgent] Current streamingResponse:', prev.streamingResponse);
+              }
 
               const newMessages = [...prev.messages];
 
               // Flush remaining tools if any
               if (finalToolCalls.length > 0) {
-                console.log('[useAiAgent] Flushing', finalToolCalls.length, 'remaining tool calls');
+                if (import.meta.env.DEV) console.log('[useAiAgent] Flushing', finalToolCalls.length, 'remaining tool calls');
                 const toolMessages = finalToolCalls.map((tool) => ({
                   type: 'tool-call' as const,
                   id: crypto.randomUUID(),
@@ -395,11 +401,13 @@ export function useAiAgent() {
 
               // Flush remaining text if any
               if (finalStreamBuffer && finalStreamBuffer.trim()) {
-                console.log(
-                  '[useAiAgent] Flushing final text on done. Length:',
-                  finalStreamBuffer.length
-                );
-                console.log('[useAiAgent] Final text content:', finalStreamBuffer);
+                if (import.meta.env.DEV) {
+                  console.log(
+                    '[useAiAgent] Flushing final text on done. Length:',
+                    finalStreamBuffer.length
+                  );
+                  console.log('[useAiAgent] Final text content:', finalStreamBuffer);
+                }
                 const assistantMessage: AssistantMessage = {
                   type: 'assistant',
                   id: crypto.randomUUID(),
@@ -408,7 +416,7 @@ export function useAiAgent() {
                 };
 
                 newMessages.push(assistantMessage);
-              } else {
+              } else if (import.meta.env.DEV) {
                 console.log(
                   '[useAiAgent] No text to flush (finalStreamBuffer is empty or whitespace)'
                 );
@@ -416,33 +424,39 @@ export function useAiAgent() {
 
               // Attach checkpoint ID to the last user message if we have one
               if (pendingCheckpointIdRef.current) {
-                console.log(
-                  '[useAiAgent] Attaching checkpoint ID to last user message:',
-                  pendingCheckpointIdRef.current
-                );
+                if (import.meta.env.DEV) {
+                  console.log(
+                    '[useAiAgent] Attaching checkpoint ID to last user message:',
+                    pendingCheckpointIdRef.current
+                  );
+                }
                 // Find the last user message and attach checkpoint
                 for (let i = newMessages.length - 1; i >= 0; i--) {
                   if (newMessages[i].type === 'user') {
                     (newMessages[i] as UserMessage).checkpointId = pendingCheckpointIdRef.current;
-                    console.log(
-                      '[useAiAgent] Attached checkpoint to user message:',
-                      newMessages[i].id
-                    );
+                    if (import.meta.env.DEV) {
+                      console.log(
+                        '[useAiAgent] Attached checkpoint to user message:',
+                        newMessages[i].id
+                      );
+                    }
                     break;
                   }
                 }
                 pendingCheckpointIdRef.current = null; // Clear after use
               }
 
-              console.log('[useAiAgent] Final messages count after flush:', newMessages.length);
-              console.log(
-                '[useAiAgent] Final messages:',
-                newMessages.map((m) => ({
-                  type: m.type,
-                  id: m.id,
-                  content: 'content' in m ? m.content.substring(0, 50) : 'N/A',
-                }))
-              );
+              if (import.meta.env.DEV) {
+                console.log('[useAiAgent] Final messages count after flush:', newMessages.length);
+                console.log(
+                  '[useAiAgent] Final messages:',
+                  newMessages.map((m) => ({
+                    type: m.type,
+                    id: m.id,
+                    content: 'content' in m ? m.content.substring(0, 50) : 'N/A',
+                  }))
+                );
+              }
 
               // Save conversation after adding message
               setTimeout(() => void saveConversation(), 100);
@@ -457,12 +471,11 @@ export function useAiAgent() {
             });
 
             // Reset all refs AFTER capturing values
-            console.log('[useAiAgent] Resetting refs');
             streamBufferRef.current = '';
             currentToolCallsRef.current = [];
             lastModeRef.current = null;
             // Note: pendingCheckpointIdRef is cleared when attached to message, not here
-            console.log('[useAiAgent] ===== DONE EVENT PROCESSED =====');
+            if (import.meta.env.DEV) console.log('[useAiAgent] ===== DONE EVENT PROCESSED =====');
             break;
           }
         }
@@ -544,13 +557,13 @@ export function useAiAgent() {
   // Submit prompt to AI agent
   const submitPrompt = useCallback(
     async (prompt: string, mode: AiMode) => {
-      console.log('[useAiAgent] submitPrompt called', { prompt, mode });
+      if (import.meta.env.DEV) console.log('[useAiAgent] submitPrompt called', { prompt, mode });
 
       // Check if API key exists
       try {
-        console.log('[useAiAgent] Checking for API key...');
+        if (import.meta.env.DEV) console.log('[useAiAgent] Checking for API key...');
         const hasKey = await invoke<boolean>('has_api_key');
-        console.log('[useAiAgent] Has API key:', hasKey);
+        if (import.meta.env.DEV) console.log('[useAiAgent] Has API key:', hasKey);
         if (!hasKey) {
           setState((prev) => ({
             ...prev,
@@ -570,7 +583,7 @@ export function useAiAgent() {
       // Lazy validation: check if the current model is still available
       let modelToUse = state.currentModel;
       try {
-        console.log('[useAiAgent] Validating model:', state.currentModel);
+        if (import.meta.env.DEV) console.log('[useAiAgent] Validating model:', state.currentModel);
         const validation: ModelValidation = await validateModel(state.currentModel);
         if (!validation.is_valid) {
           console.warn(
@@ -611,7 +624,7 @@ export function useAiAgent() {
       const updatedMessages = [...state.messages, userMessage];
 
       // Reset streaming state
-      console.log('[useAiAgent] Starting stream with', updatedMessages.length, 'messages');
+      if (import.meta.env.DEV) console.log('[useAiAgent] Starting stream with', updatedMessages.length, 'messages');
       setState((prev) => ({
         ...prev,
         isStreaming: true,
@@ -632,16 +645,16 @@ export function useAiAgent() {
       try {
         // Start sidecar if not running
         if (!sidecarRef.current) {
-          console.log('[useAiAgent] Starting sidecar...');
+          if (import.meta.env.DEV) console.log('[useAiAgent] Starting sidecar...');
           const provider = await invoke<string>('get_ai_provider');
           const apiKey = await invoke<string>('get_api_key');
           const model = await invoke<string>('get_ai_model');
-          console.log('[useAiAgent] Got API key for provider:', provider, 'model:', model);
+          if (import.meta.env.DEV) console.log('[useAiAgent] Got API key for provider:', provider, 'model:', model);
           await invoke('start_ai_agent', { apiKey, provider });
-          console.log('[useAiAgent] Sidecar started successfully');
+          if (import.meta.env.DEV) console.log('[useAiAgent] Sidecar started successfully');
           sidecarRef.current = true;
         } else {
-          console.log('[useAiAgent] Sidecar already running');
+          if (import.meta.env.DEV) console.log('[useAiAgent] Sidecar already running');
         }
 
         // Convert to legacy format for backend
@@ -651,22 +664,24 @@ export function useAiAgent() {
         const provider = getProviderFromModel(modelToUse) || 'anthropic';
 
         // Send query to sidecar with full message history, current model, and provider
-        console.log(
-          '[useAiAgent] Sending query to sidecar with',
-          legacyMessages.length,
-          'messages',
-          'using model:',
-          modelToUse,
-          'provider:',
-          provider
-        );
+        if (import.meta.env.DEV) {
+          console.log(
+            '[useAiAgent] Sending query to sidecar with',
+            legacyMessages.length,
+            'messages',
+            'using model:',
+            modelToUse,
+            'provider:',
+            provider
+          );
+        }
         await invoke('send_ai_query', {
           messages: legacyMessages,
           model: modelToUse,
           provider,
           mode,
         });
-        console.log('[useAiAgent] Query sent successfully');
+        if (import.meta.env.DEV) console.log('[useAiAgent] Query sent successfully');
       } catch (err) {
         console.error('[useAiAgent] Error submitting prompt:', err);
         setState((prev) => ({
@@ -683,7 +698,7 @@ export function useAiAgent() {
   // Cancel streaming
   const cancelStream = useCallback(async () => {
     try {
-      console.log('[useAiAgent] Cancelling stream...');
+      if (import.meta.env.DEV) console.log('[useAiAgent] Cancelling stream...');
       await invoke('cancel_ai_stream');
 
       // Reset all streaming state
@@ -701,7 +716,7 @@ export function useAiAgent() {
       lastChunkRef.current = '';
       pendingCheckpointIdRef.current = null;
 
-      console.log('[useAiAgent] Stream cancelled successfully');
+      if (import.meta.env.DEV) console.log('[useAiAgent] Stream cancelled successfully');
     } catch (err) {
       console.error('Failed to cancel stream:', err);
     }
@@ -767,7 +782,7 @@ export function useAiAgent() {
 
   // Set current model and persist to backend
   const setCurrentModel = useCallback(async (model: string) => {
-    console.log('[useAiAgent] Setting current model to:', model);
+    if (import.meta.env.DEV) console.log('[useAiAgent] Setting current model to:', model);
     setState((prev) => ({
       ...prev,
       currentModel: model,
@@ -776,7 +791,7 @@ export function useAiAgent() {
     // Persist the model selection to backend storage
     try {
       await invoke('set_ai_model', { model });
-      console.log('[useAiAgent] Model persisted to backend:', model);
+      if (import.meta.env.DEV) console.log('[useAiAgent] Model persisted to backend:', model);
     } catch (err) {
       console.error('[useAiAgent] Failed to persist model:', err);
     }
@@ -785,7 +800,7 @@ export function useAiAgent() {
   // Handle checkpoint restoration with conversation truncation
   const handleRestoreCheckpoint = useCallback(
     (checkpointId: string, truncatedMessages: Message[]) => {
-      console.log('[useAiAgent] Restoring checkpoint and truncating conversation:', checkpointId);
+      if (import.meta.env.DEV) console.log('[useAiAgent] Restoring checkpoint and truncating conversation:', checkpointId);
       setState((prev) => ({
         ...prev,
         messages: truncatedMessages,
