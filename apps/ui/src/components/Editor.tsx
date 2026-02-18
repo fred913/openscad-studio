@@ -1,8 +1,8 @@
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import type { Diagnostic } from '../api/tauri';
+import type { Diagnostic } from '../platform/historyService';
 import { useEffect, useRef, useState } from 'react';
 import type * as Monaco from 'monaco-editor';
-import { listen } from '@tauri-apps/api/event';
+import { eventBus } from '../platform';
 import { formatOpenScadCode } from '../utils/formatter';
 import { loadSettings, type Settings } from '../stores/settingsStore';
 import { getTheme } from '../themes';
@@ -104,16 +104,13 @@ export function Editor({
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
-    const setupListener = async () => {
-      if (import.meta.env.DEV) console.log('[Editor] Setting up code-updated listener');
-      unlisten = await listen<string>('code-updated', (event) => {
-        if (import.meta.env.DEV) console.log('[Editor] Received code-updated event, payload length:', event.payload.length);
-        onChange(event.payload);
-      });
-      if (import.meta.env.DEV) console.log('[Editor] code-updated listener setup complete');
-    };
-
-    setupListener();
+    if (import.meta.env.DEV) console.log('[Editor] Setting up code-updated listener');
+    unlisten = eventBus.on('code-updated', ({ code }) => {
+      if (import.meta.env.DEV)
+        console.log('[Editor] Received code-updated event, payload length:', code.length);
+      onChange(code);
+    });
+    if (import.meta.env.DEV) console.log('[Editor] code-updated listener setup complete');
 
     return () => {
       if (unlisten) {
@@ -210,11 +207,10 @@ export function Editor({
     });
 
     // Add keyboard shortcut for save (Cmd+S / Ctrl+S)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, async () => {
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       if (import.meta.env.DEV) console.log('[Editor] Save triggered via Cmd+S');
       // Emit the save event so App.tsx can handle formatting and file save
-      const { emit } = await import('@tauri-apps/api/event');
-      await emit('menu:file:save');
+      eventBus.emit('menu:file:save');
     });
 
     // Ensure full OpenSCAD language support (syntax, config, tokens)

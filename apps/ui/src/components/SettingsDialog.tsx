@@ -19,6 +19,7 @@ import {
   hasApiKeyForProvider,
   getAvailableProviders as getAvailableProvidersFromStore,
 } from '../stores/apiKeyStore';
+import { getPlatform } from '../platform';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -150,8 +151,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
   };
 
   const handleClear = async () => {
-    const { confirm } = await import('@tauri-apps/plugin-dialog');
-    const confirmed = await confirm(
+    const confirmed = await getPlatform().confirm(
       `Are you sure you want to remove your ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key?`,
       { title: 'Remove API Key', kind: 'warning', okLabel: 'Remove', cancelLabel: 'Cancel' }
     );

@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeFile } from '@tauri-apps/plugin-fs';
-import type { ExportFormat } from '../api/tauri';
+import { getPlatform, type ExportFormat } from '../platform';
 import { RenderService, type ExportFormat as WasmExportFormat } from '../services/renderService';
 import { Button, Select, Label } from './ui';
 
@@ -21,11 +19,7 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'dxf', label: 'DXF (2D CAD)', ext: 'dxf' },
 ];
 
-export function ExportDialog({
-  isOpen,
-  onClose,
-  source,
-}: ExportDialogProps) {
+export function ExportDialog({ isOpen, onClose, source }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -40,28 +34,14 @@ export function ExportDialog({
       const selectedFormat = FORMAT_OPTIONS.find((f) => f.value === format);
       if (!selectedFormat) return;
 
-      // Open save dialog
-      const savePath = await save({
-        filters: [
-          {
-            name: selectedFormat.label,
-            extensions: [selectedFormat.ext],
-          },
-        ],
-      });
-
-      if (!savePath) {
-        // User cancelled
-        setIsExporting(false);
-        return;
-      }
-
-      // Render via WASM and write to file
       const exportBytes = await RenderService.getInstance().exportModel(
         source,
-        format as WasmExportFormat,
+        format as WasmExportFormat
       );
-      await writeFile(savePath, exportBytes);
+
+      await getPlatform().fileExport(exportBytes, `export.${selectedFormat.ext}`, [
+        { name: selectedFormat.label, extensions: [selectedFormat.ext] },
+      ]);
 
       // Success - close dialog
       onClose();

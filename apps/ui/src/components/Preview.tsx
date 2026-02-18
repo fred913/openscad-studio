@@ -1,6 +1,6 @@
 import { ThreeViewer } from './ThreeViewer';
 import { SvgViewer } from './SvgViewer';
-import type { RenderKind } from '../api/tauri';
+import type { RenderKind } from '../hooks/useOpenScad';
 
 interface PreviewProps {
   src: string;

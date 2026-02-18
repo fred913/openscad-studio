@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Diagnostic } from '../api/tauri';
+import type { Diagnostic } from '../platform/historyService';
 
 interface DiagnosticsPanelProps {
   diagnostics: Diagnostic[];
@@ -67,7 +67,10 @@ export function DiagnosticsPanel({ diagnostics }: DiagnosticsPanelProps) {
                 >
                   echo
                 </span>
-                <p className="text-sm flex-1 min-w-0 font-mono" style={{ color: 'var(--text-primary)' }}>
+                <p
+                  className="text-sm flex-1 min-w-0 font-mono"
+                  style={{ color: 'var(--text-primary)' }}
+                >
                   {diag.message.replace(/^ECHO:\s*/i, '')}
                 </p>
               </div>

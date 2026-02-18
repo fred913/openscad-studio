@@ -5,6 +5,7 @@ import { Button } from './ui';
 import { MarkdownMessage } from './MarkdownMessage';
 import { ModelSelector } from './ModelSelector';
 import { useHistory } from '../hooks/useHistory';
+import { getPlatform } from '../platform';
 
 function getImageDataUrlFromResult(result: unknown): string | null {
   if (!result) return null;
@@ -114,8 +115,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
 
         // Only show warning if there are conversation turns after this one
         if (hasLaterMessages) {
-          const { confirm } = await import('@tauri-apps/plugin-dialog');
-          const shouldProceed = await confirm(
+          const shouldProceed = await getPlatform().confirm(
             'This will restore the code to before this turn and remove all subsequent conversation. Continue?',
             {
               title: 'Restore Checkpoint',

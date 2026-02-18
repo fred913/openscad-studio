@@ -10,7 +10,7 @@ import { parseCustomizerParams } from '../utils/customizer/parser';
 import type { CustomizerParam } from '../utils/customizer/types';
 import { ParameterControl } from './customizer/ParameterControl';
 import { TbChevronDown, TbChevronRight } from 'react-icons/tb';
-import { emit } from '@tauri-apps/api/event';
+import { eventBus } from '../platform';
 
 interface CustomizerPanelProps {
   code: string;
@@ -69,8 +69,9 @@ export function CustomizerPanel({ code, onChange }: CustomizerPanelProps) {
 
         // Trigger a render after updating the code
         try {
-          await emit('render-requested');
-          if (import.meta.env.DEV) console.log('[Customizer] Triggered render after parameter change:', param.name);
+          eventBus.emit('render-requested');
+          if (import.meta.env.DEV)
+            console.log('[Customizer] Triggered render after parameter change:', param.name);
         } catch (err) {
           console.error('[Customizer] Failed to emit render-requested event:', err);
         }

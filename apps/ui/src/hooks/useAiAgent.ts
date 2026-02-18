@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { streamText, type ModelMessage, type ToolSet, stepCountIs } from 'ai';
-import { invoke } from '@tauri-apps/api/core';
 import type { AiMode } from '../components/AiPromptPanel';
+import { historyService, eventBus } from '../platform';
 import {
   createModel,
   SYSTEM_PROMPT,
@@ -476,13 +476,14 @@ export function useAiAgent() {
   }, []);
 
   const handleRestoreCheckpoint = useCallback(
-    async (checkpointId: string, truncatedMessages: Message[]) => {
+    (checkpointId: string, truncatedMessages: Message[]) => {
       if (import.meta.env.DEV) console.log('[useAiAgent] Restoring checkpoint:', checkpointId);
 
-      try {
-        await invoke('restore_to_checkpoint', { checkpointId });
-      } catch (err) {
-        console.error('[useAiAgent] Failed to restore checkpoint via invoke:', err);
+      const checkpoint = historyService.restoreTo(checkpointId);
+      if (checkpoint) {
+        eventBus.emit('history:restore', { code: checkpoint.code });
+      } else {
+        console.error('[useAiAgent] Failed to restore checkpoint: not found', checkpointId);
       }
 
       setState((prev) => ({

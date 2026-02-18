@@ -2,8 +2,7 @@ import { tool } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
-import { invoke } from '@tauri-apps/api/core';
-import { emit } from '@tauri-apps/api/event';
+import { eventBus, historyService } from '../platform';
 import { RenderService } from './renderService';
 import { captureOffscreen, type CaptureOptions } from './offscreenRenderer';
 import type { AiProvider } from '../stores/apiKeyStore';
@@ -219,28 +218,17 @@ export function buildTools(callbacks: AiToolCallbacks) {
           return `❌ Failed to apply edit: introduces ${afterErrors - beforeErrors} new error(s).\n\nCompilation errors after applying edit:\n${errorMessages}\n\nRationale: ${rationale}\n\nThe edit was rolled back. No changes were made. Please fix the errors and try again.`;
         }
 
-        let checkpointId: string | undefined;
-        try {
-          checkpointId = await invoke<string>('create_checkpoint', {
-            code: currentCode,
-            description: `Before AI edit: ${rationale}`,
-            changeType: 'ai',
-          });
-        } catch (err) {
-          if (import.meta.env.DEV) console.warn('[aiService] Failed to create checkpoint:', err);
-        }
+        const checkpointId = historyService.createCheckpoint(
+          currentCode,
+          [],
+          `Before AI edit: ${rationale}`,
+          'ai'
+        );
 
-        await emit('history:restore', { code: newCode });
+        eventBus.emit('history:restore', { code: newCode });
+        eventBus.emit('render-requested');
 
-        try {
-          await invoke('update_editor_state', { code: newCode });
-        } catch (err) {
-          if (import.meta.env.DEV) console.warn('[aiService] Failed to update editor state:', err);
-        }
-
-        await emit('render-requested', {});
-
-        const checkpointSuffix = checkpointId ? `\n[CHECKPOINT:${checkpointId}]` : '';
+        const checkpointSuffix = `\n[CHECKPOINT:${checkpointId}]`;
         return `✅ Edit applied successfully!\n✅ Code compiles without new errors\n✅ Preview has been updated automatically\n\nRationale: ${rationale}\n\nThe changes are now live in the editor.${checkpointSuffix}`;
       },
     }),
@@ -273,7 +261,7 @@ export function buildTools(callbacks: AiToolCallbacks) {
       description: 'Manually trigger a preview render',
       inputSchema: z.object({}),
       execute: async () => {
-        await emit('render-requested', {});
+        eventBus.emit('render-requested');
         return '✅ Render triggered. Check the preview pane for the updated output.';
       },
     }),

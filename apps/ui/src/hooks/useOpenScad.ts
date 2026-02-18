@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { updateEditorState } from '../api/tauri';
 import { RenderService, type Diagnostic } from '../services/renderService';
 
 export type RenderKind = 'mesh' | 'svg';
@@ -45,7 +44,8 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
 
   const doRender = useCallback(
     async (code: string, dimension: '2d' | '3d' = '3d') => {
-      if (import.meta.env.DEV) console.log('[doRender] Starting render:', { dimension, codeLength: code.length });
+      if (import.meta.env.DEV)
+        console.log('[doRender] Starting render:', { dimension, codeLength: code.length });
 
       if (!renderServiceRef.current) {
         setError('RenderService not available');
@@ -79,9 +79,7 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
 
         if (result.output.length > 0) {
           // Create Blob URL from output bytes
-          const mimeType = result.kind === 'mesh'
-            ? 'application/octet-stream'
-            : 'image/svg+xml';
+          const mimeType = result.kind === 'mesh' ? 'application/octet-stream' : 'image/svg+xml';
           const blob = new Blob([result.output], { type: mimeType });
           const blobUrl = URL.createObjectURL(blob);
           prevBlobUrlRef.current = blobUrl;
@@ -110,12 +108,9 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
   );
 
   const updateSource = useCallback((newSource: string) => {
-    if (import.meta.env.DEV) console.log('[useOpenScad] updateSource called with new code length:', newSource.length);
+    if (import.meta.env.DEV)
+      console.log('[useOpenScad] updateSource called with new code length:', newSource.length);
     setSource(newSource);
-    // Sync with backend EditorState for AI agent (still needed until Phase 2)
-    updateEditorState(newSource).catch((err) => {
-      console.error('Failed to update editor state:', err);
-    });
   }, []);
 
   // Initial render when WASM is ready
@@ -143,7 +138,11 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
 
   // Manual render function (stable callback)
   const manualRender = useCallback(() => {
-    if (import.meta.env.DEV) console.log('[useOpenScad] manualRender called', { sourceLength: source.length, dimensionMode });
+    if (import.meta.env.DEV)
+      console.log('[useOpenScad] manualRender called', {
+        sourceLength: source.length,
+        dimensionMode,
+      });
     lastRenderedSourceRef.current = source;
     doRender(source, dimensionMode);
   }, [source, dimensionMode, doRender]);
