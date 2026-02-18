@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   renderPreview,
   locateOpenScad,
@@ -11,7 +11,14 @@ import {
 } from '../api/tauri';
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-export function useOpenScad(workingDir?: string | null) {
+interface UseOpenScadOptions {
+  workingDir?: string | null;
+  autoRenderOnIdle?: boolean;
+  autoRenderDelayMs?: number;
+}
+
+export function useOpenScad(options: UseOpenScadOptions = {}) {
+  const { workingDir, autoRenderOnIdle = false, autoRenderDelayMs = 500 } = options;
   const [source, setSource] = useState<string>(
     '// Type your OpenSCAD code here\ncube([10, 10, 10]);'
   );
@@ -28,7 +35,7 @@ export function useOpenScad(workingDir?: string | null) {
     locateOpenScad({})
       .then((response) => {
         setOpenscadPath(response.exe_path);
-        console.log('Found OpenSCAD at:', response.exe_path);
+        if (import.meta.env.DEV) console.log('Found OpenSCAD at:', response.exe_path);
         // Sync with backend state for AI agent
         updateOpenscadPath(response.exe_path).catch((err) => {
           console.error('Failed to update openscad path in backend:', err);
@@ -42,7 +49,7 @@ export function useOpenScad(workingDir?: string | null) {
 
   const doRender = useCallback(
     async (code: string, useMesh = true, dimension: '2d' | '3d' = '3d') => {
-      console.log('[doRender] Starting render:', { dimension, useMesh, codeLength: code.length });
+      if (import.meta.env.DEV) console.log('[doRender] Starting render:', { dimension, useMesh, codeLength: code.length });
 
       if (!openscadPath) {
         setError('OpenSCAD path not set');
@@ -54,7 +61,7 @@ export function useOpenScad(workingDir?: string | null) {
       setPreviewSrc(''); // Clear preview immediately when starting new render
 
       try {
-        console.log('[doRender] Calling renderPreview...');
+        if (import.meta.env.DEV) console.log('[doRender] Calling renderPreview...');
         const result: RenderPreviewResponse = await renderPreview(openscadPath, {
           source: code,
           view: dimension,
@@ -63,11 +70,13 @@ export function useOpenScad(workingDir?: string | null) {
           working_dir: workingDir || undefined,
         });
 
-        console.log('[doRender] Render success:', {
-          kind: result.kind,
-          path: result.path,
-          diagnostics: result.diagnostics.length,
-        });
+        if (import.meta.env.DEV) {
+          console.log('[doRender] Render success:', {
+            kind: result.kind,
+            path: result.path,
+            diagnostics: result.diagnostics.length,
+          });
+        }
         setDiagnostics(result.diagnostics);
         setPreviewKind(result.kind);
 
@@ -75,11 +84,11 @@ export function useOpenScad(workingDir?: string | null) {
         // Add timestamp to bust browser cache
         const assetUrl = convertFileSrc(result.path);
         const cacheBustedUrl = `${assetUrl}?t=${Date.now()}`;
-        console.log('[doRender] Setting preview src:', cacheBustedUrl);
+        if (import.meta.env.DEV) console.log('[doRender] Setting preview src:', cacheBustedUrl);
         setPreviewSrc(cacheBustedUrl);
       } catch (err) {
         const errorMsg = typeof err === 'string' ? err : String(err);
-        console.log('[doRender] Render error:', errorMsg);
+        if (import.meta.env.DEV) console.log('[doRender] Render error:', errorMsg);
 
         // Fetch diagnostics from backend EditorState (errors may have been stored there)
         try {
@@ -97,7 +106,7 @@ export function useOpenScad(workingDir?: string | null) {
 
         if (is2DObjectIn3DMode || is3DObjectIn2DMode) {
           const newDimension = dimension === '2d' ? '3d' : '2d';
-          console.log(`[doRender] Auto-switching from ${dimension} to ${newDimension} mode`);
+          if (import.meta.env.DEV) console.log(`[doRender] Auto-switching from ${dimension} to ${newDimension} mode`);
 
           // Update dimension mode
           setDimensionMode(newDimension);
@@ -112,10 +121,12 @@ export function useOpenScad(workingDir?: string | null) {
               working_dir: workingDir || undefined,
             });
 
-            console.log('[doRender] Auto-retry success:', {
-              kind: retryResult.kind,
-              path: retryResult.path,
-            });
+            if (import.meta.env.DEV) {
+              console.log('[doRender] Auto-retry success:', {
+                kind: retryResult.kind,
+                path: retryResult.path,
+              });
+            }
             setDiagnostics(retryResult.diagnostics);
             setPreviewKind(retryResult.kind);
 
@@ -126,7 +137,7 @@ export function useOpenScad(workingDir?: string | null) {
           } catch (retryErr) {
             // Both modes failed - show error
             const retryErrorMsg = typeof retryErr === 'string' ? retryErr : String(retryErr);
-            console.log('[doRender] Auto-retry also failed:', retryErrorMsg);
+            if (import.meta.env.DEV) console.log('[doRender] Auto-retry also failed:', retryErrorMsg);
             setError(
               `Failed to render in both 2D and 3D modes.\n\nOriginal error: ${errorMsg}\n\nRetry error: ${retryErrorMsg}`
             );
@@ -147,7 +158,7 @@ export function useOpenScad(workingDir?: string | null) {
   );
 
   const updateSource = useCallback((newSource: string) => {
-    console.log('[useOpenScad] updateSource called with new code length:', newSource.length);
+    if (import.meta.env.DEV) console.log('[useOpenScad] updateSource called with new code length:', newSource.length);
     setSource(newSource);
     // Sync with backend EditorState for AI agent
     updateEditorState(newSource).catch((err) => {
@@ -159,6 +170,7 @@ export function useOpenScad(workingDir?: string | null) {
   // Initial render when OpenSCAD path is found
   useEffect(() => {
     if (openscadPath && source) {
+      lastRenderedSourceRef.current = source;
       doRender(source, true); // Default to mesh rendering
     }
   }, [openscadPath]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -170,19 +182,42 @@ export function useOpenScad(workingDir?: string | null) {
     setError('');
   }, []);
 
+  // Debounced auto-render on idle
+  const autoRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRenderedSourceRef = useRef<string>(source);
+
   // Manual render function (stable callback)
   const manualRender = useCallback(() => {
-    console.log('[useOpenScad] manualRender called', {
-      sourceLength: source.length,
-      dimensionMode,
-    });
+    if (import.meta.env.DEV) console.log('[useOpenScad] manualRender called', { sourceLength: source.length, dimensionMode });
+    lastRenderedSourceRef.current = source;
     doRender(source, true, dimensionMode);
   }, [source, dimensionMode, doRender]);
 
   // Render on save function (stable callback)
   const renderOnSave = useCallback(() => {
+    lastRenderedSourceRef.current = source;
     doRender(source, true, dimensionMode);
   }, [source, dimensionMode, doRender]);
+
+  useEffect(() => {
+    if (!autoRenderOnIdle || !openscadPath) return;
+    if (source === lastRenderedSourceRef.current) return;
+
+    if (autoRenderTimerRef.current) {
+      clearTimeout(autoRenderTimerRef.current);
+    }
+
+    autoRenderTimerRef.current = setTimeout(() => {
+      lastRenderedSourceRef.current = source;
+      doRender(source, true, dimensionMode);
+    }, autoRenderDelayMs);
+
+    return () => {
+      if (autoRenderTimerRef.current) {
+        clearTimeout(autoRenderTimerRef.current);
+      }
+    };
+  }, [source, autoRenderOnIdle, autoRenderDelayMs, openscadPath, doRender, dimensionMode]);
 
   return {
     source,

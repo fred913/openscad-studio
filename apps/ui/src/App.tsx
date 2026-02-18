@@ -4,7 +4,7 @@ import type { DockviewReadyEvent } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { ExportDialog } from './components/ExportDialog';
 import type { AiPromptPanelRef } from './components/AiPromptPanel';
-import { SettingsDialog } from './components/SettingsDialog';
+import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
 import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen';
 import { OpenScadSetupScreen } from './components/OpenScadSetupScreen';
 import { TabBar, type Tab } from './components/TabBar';
@@ -26,9 +26,10 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { renderExact, type ExportFormat, updateEditorState, updateWorkingDir } from './api/tauri';
-import { loadSettings, type Settings } from './stores/settingsStore';
+import { useSettings, loadSettings } from './stores/settingsStore';
 import { formatOpenScadCode } from './utils/formatter';
 import { TbSettings, TbBox, TbRuler2 } from 'react-icons/tb';
+import { Toaster, toast } from 'sonner';
 
 // Helper to generate unique IDs for tabs
 function generateId(): string {
@@ -65,6 +66,11 @@ function App() {
       ? activeTab.filePath.substring(0, activeTab.filePath.lastIndexOf('/'))
       : null;
 
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsSection | undefined>(undefined);
+  const [settings] = useSettings();
+
   const {
     source,
     updateSource,
@@ -77,10 +83,11 @@ function App() {
     dimensionMode,
     manualRender,
     renderOnSave,
-  } = useOpenScad(workingDir);
-  const [showExportDialog, setShowExportDialog] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [settings, setSettings] = useState<Settings>(loadSettings());
+  } = useOpenScad({
+    workingDir,
+    autoRenderOnIdle: settings.editor.autoRenderOnIdle,
+    autoRenderDelayMs: settings.editor.autoRenderDelayMs,
+  });
   const aiPromptPanelRef = useRef<AiPromptPanelRef>(null);
 
   // AI Agent state
@@ -333,7 +340,7 @@ function App() {
       tabSwitchRenderTimerRef.current = window.setTimeout(() => {
         if (manualRenderRef.current) {
           const currentTab = tabs.find((t) => t.id === activeTabId);
-          console.log('[App] Auto-rendering after tab change to:', currentTab?.name);
+          if (import.meta.env.DEV) console.log('[App] Auto-rendering after tab change to:', currentTab?.name);
           manualRenderRef.current();
         }
         tabSwitchRenderTimerRef.current = null;
@@ -376,7 +383,7 @@ function App() {
         // Ensure savePath is valid before proceeding
         if (!savePath) {
           console.error('[saveFile] Invalid save path');
-          alert('Failed to save file: No path specified');
+          toast.error('Failed to save file: No path specified');
           return false;
         }
 
@@ -431,7 +438,7 @@ function App() {
       } catch (err) {
         console.error('[saveFile] Save failed:', err);
         const errorMsg = err instanceof Error ? err.message : String(err);
-        alert(`Failed to save file: ${errorMsg}`);
+        toast.error(`Failed to save file: ${errorMsg}`);
         return false;
       }
     },
@@ -514,7 +521,7 @@ function App() {
         }
       } catch (err) {
         console.error('Failed to open recent file:', err);
-        alert(`Failed to open file: ${err}`);
+        toast.error(`Failed to open file: ${err}`);
       }
     },
     [tabs, showWelcome, switchTab, createNewTab, updateSource]
@@ -586,7 +593,7 @@ function App() {
       }
     } catch (err) {
       console.error('Failed to open file:', err);
-      alert(`Failed to open file: ${err}`);
+      toast.error(`Failed to open file: ${err}`);
     }
   }, [tabs, showWelcome, switchTab, createNewTab, updateSource]);
 
@@ -687,7 +694,7 @@ function App() {
         } catch (err) {
           console.error('Open failed:', err);
           if (isMounted) {
-            alert(`Failed to open file: ${err}`);
+            toast.error(`Failed to open file: ${err}`);
           }
         }
       });
@@ -738,12 +745,12 @@ function App() {
           });
 
           if (isMounted) {
-            alert(`Exported successfully to ${savePath}`);
+            toast.success(`Exported successfully to ${savePath}`);
           }
         } catch (err) {
           console.error('Export failed:', err);
           if (isMounted) {
-            alert(`Export failed: ${err}`);
+            toast.error(`Export failed: ${err}`);
           }
         }
       });
@@ -801,25 +808,23 @@ function App() {
     let unlisten: (() => void) | null = null;
 
     const setupListener = async () => {
-      console.log('[App] Setting up render-requested listener');
+      if (import.meta.env.DEV) console.log('[App] Setting up render-requested listener');
       unlisten = await listen('render-requested', () => {
-        console.log('[App] ✅ Received render-requested event from AI');
-        console.log('[App] manualRenderRef.current exists:', !!manualRenderRef.current);
+        if (import.meta.env.DEV) console.log('[App] Received render-requested event from AI');
         if (manualRenderRef.current) {
-          console.log('[App] Calling manualRenderRef.current()');
           manualRenderRef.current();
         } else {
-          console.error('[App] ❌ manualRenderRef.current is not set!');
+          console.error('[App] manualRenderRef.current is not set!');
         }
       });
-      console.log('[App] render-requested listener setup complete');
+      if (import.meta.env.DEV) console.log('[App] render-requested listener setup complete');
     };
 
     setupListener();
 
     return () => {
       if (unlisten) {
-        console.log('[App] Cleaning up render-requested listener');
+        if (import.meta.env.DEV) console.log('[App] Cleaning up render-requested listener');
         unlisten();
       }
     };
@@ -830,9 +835,9 @@ function App() {
     let unlisten: (() => void) | null = null;
 
     const setupListener = async () => {
-      console.log('[App] Setting up history:restore listener');
+      if (import.meta.env.DEV) console.log('[App] Setting up history:restore listener');
       unlisten = await listen<{ code: string }>('history:restore', (event) => {
-        console.log('[App] ✅ Received history:restore event');
+        if (import.meta.env.DEV) console.log('[App] Received history:restore event');
         const { code } = event.payload;
 
         // Update editor with restored code
@@ -852,14 +857,14 @@ function App() {
           )
         );
       });
-      console.log('[App] history:restore listener setup complete');
+      if (import.meta.env.DEV) console.log('[App] history:restore listener setup complete');
     };
 
     setupListener();
 
     return () => {
       if (unlisten) {
-        console.log('[App] Cleaning up history:restore listener');
+        if (import.meta.env.DEV) console.log('[App] Cleaning up history:restore listener');
         unlisten();
       }
     };
@@ -895,6 +900,13 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [createNewTab, closeTab, activeTabId]);
+
+  useEffect(() => {
+    if (aiError) {
+      toast.error(aiError, { duration: Infinity, dismissible: true });
+      clearAiError();
+    }
+  }, [aiError, clearAiError]);
 
   const onDockviewReady = useCallback((event: DockviewReadyEvent) => {
     const { api } = event;
@@ -1013,12 +1025,19 @@ function App() {
           onStartManually={handleStartManually}
           onOpenRecent={handleOpenRecent}
           onOpenFile={handleOpenFile}
+          onOpenSettings={() => {
+            setSettingsInitialTab('ai');
+            setShowSettingsDialog(true);
+          }}
         />
         {/* Settings dialog still accessible from welcome screen via keyboard shortcut */}
         <SettingsDialog
           isOpen={showSettingsDialog}
-          onClose={() => setShowSettingsDialog(false)}
-          onSettingsChange={setSettings}
+          onClose={() => {
+            setShowSettingsDialog(false);
+            setSettingsInitialTab(undefined);
+          }}
+          initialTab={settingsInitialTab}
         />
       </div>
     );
@@ -1151,36 +1170,24 @@ function App() {
       {/* Settings dialog */}
       <SettingsDialog
         isOpen={showSettingsDialog}
-        onClose={() => setShowSettingsDialog(false)}
-        onSettingsChange={setSettings}
+        onClose={() => {
+          setShowSettingsDialog(false);
+          setSettingsInitialTab(undefined);
+        }}
+        initialTab={settingsInitialTab}
       />
 
-      {/* AI Error notification */}
-      {aiError && (
-        <div
-          className="fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg max-w-md z-50"
-          style={{
-            backgroundColor: 'var(--color-error)',
-            border: '1px solid var(--color-error)',
-            color: 'var(--text-inverse)',
-            opacity: 0.9,
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="font-semibold mb-1">AI Error</div>
-              <div className="text-sm">{aiError}</div>
-            </div>
-            <button
-              onClick={clearAiError}
-              className="transition-colors"
-              style={{ color: 'var(--text-inverse)', opacity: 0.7 }}
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+      <Toaster
+        richColors
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-primary)',
+          },
+        }}
+      />
     </div>
   );
 }

@@ -1,8 +1,4 @@
-/**
- * Settings Store
- *
- * Centralized settings management with localStorage persistence
- */
+import { useSyncExternalStore, useCallback } from 'react';
 
 export interface EditorSettings {
   formatOnSave: boolean;
@@ -10,6 +6,8 @@ export interface EditorSettings {
   useTabs: boolean;
   vimMode: boolean;
   vimConfig: string;
+  autoRenderOnIdle: boolean;
+  autoRenderDelayMs: number;
 }
 
 export interface AppearanceSettings {
@@ -17,7 +15,7 @@ export interface AppearanceSettings {
 }
 
 export interface UiSettings {
-  customizerWidth: number; // Width of customizer panel in pixels
+  customizerWidth: number;
 }
 
 export interface Settings {
@@ -41,6 +39,16 @@ map jj <Esc> insert
 # map <C-h> <C-w>h normal
 `;
 
+function getSystemDefaultTheme(): string {
+  try {
+    return window.matchMedia('(prefers-color-scheme: light)').matches
+      ? 'solarized-light'
+      : 'solarized-dark';
+  } catch {
+    return 'solarized-dark';
+  }
+}
+
 const DEFAULT_SETTINGS: Settings = {
   editor: {
     formatOnSave: true,
@@ -48,9 +56,11 @@ const DEFAULT_SETTINGS: Settings = {
     useTabs: false,
     vimMode: false,
     vimConfig: DEFAULT_VIM_CONFIG,
+    autoRenderOnIdle: false,
+    autoRenderDelayMs: 500,
   },
   appearance: {
-    theme: 'solarized-dark',
+    theme: getSystemDefaultTheme(),
   },
   ui: {
     customizerWidth: 420,
@@ -91,12 +101,37 @@ export function loadSettings(): Settings {
   return DEFAULT_SETTINGS;
 }
 
-/**
- * Save settings to localStorage
- */
+let listeners: Set<() => void> = new Set();
+let cachedSettings: Settings = loadSettings();
+
+function notifyListeners() {
+  cachedSettings = loadSettings();
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot(): Settings {
+  return cachedSettings;
+}
+
+export function useSettings(): [Settings, (updates: Settings) => void] {
+  const settings = useSyncExternalStore(subscribe, getSnapshot);
+  const setSettings = useCallback((updated: Settings) => {
+    saveSettings(updated);
+  }, []);
+  return [settings, setSettings];
+}
+
 export function saveSettings(settings: Settings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    notifyListeners();
   } catch (err) {
     console.error('Failed to save settings:', err);
   }

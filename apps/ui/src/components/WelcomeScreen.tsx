@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from './ui';
+import { useHasApiKey } from '../stores/apiKeyStore';
 
 interface RecentFile {
   path: string;
@@ -12,6 +13,7 @@ interface WelcomeScreenProps {
   onStartManually: () => void;
   onOpenRecent: (path: string) => void;
   onOpenFile?: () => void;
+  onOpenSettings?: () => void;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -29,9 +31,11 @@ export function WelcomeScreen({
   onStartManually,
   onOpenRecent,
   onOpenFile,
+  onOpenSettings,
 }: WelcomeScreenProps) {
   const [prompt, setPrompt] = useState('');
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const hasApiKey = useHasApiKey();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Load recent files from localStorage
@@ -75,57 +79,84 @@ export function WelcomeScreen({
           What do you want to create?
         </h1>
 
-        {/* Main input */}
-        <div className="space-y-2">
-          <div className="relative">
-            <textarea
-              ref={inputRef}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Describe your OpenSCAD project..."
-              className="w-full rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 text-base"
-              style={{
-                backgroundColor: 'var(--bg-elevated)',
-                color: 'var(--text-primary)',
-                borderColor: 'var(--border-secondary)',
-                borderWidth: '1px',
-                borderStyle: 'solid',
-                minHeight: '120px',
-                paddingRight: prompt.trim() ? '3rem' : '1rem',
-              }}
-              rows={4}
-            />
-            {prompt.trim() && (
-              <button
-                onClick={handleSubmit}
-                className="absolute right-3 bottom-3 p-2 rounded-lg transition-colors"
+        {/* Main input — only show when API key is configured */}
+        {hasApiKey ? (
+          <div className="space-y-2">
+            <div className="relative">
+              <textarea
+                ref={inputRef}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Describe your OpenSCAD project..."
+                className="w-full rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 text-base"
                 style={{
-                  backgroundColor: 'var(--accent-primary)',
-                  color: 'var(--text-inverse)',
+                  backgroundColor: 'var(--bg-elevated)',
+                  color: 'var(--text-primary)',
+                  borderColor: 'var(--border-secondary)',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  minHeight: '120px',
+                  paddingRight: prompt.trim() ? '3rem' : '1rem',
                 }}
-                title="Start with AI (⌘↵)"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
+                rows={4}
+              />
+              {prompt.trim() && (
+                <button
+                  onClick={handleSubmit}
+                  className="absolute right-3 bottom-3 p-2 rounded-lg transition-colors"
+                  style={{
+                    backgroundColor: 'var(--accent-primary)',
+                    color: 'var(--text-inverse)',
+                  }}
+                  title="Start with AI (⌘↵)"
                 >
-                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-                </svg>
-              </button>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {prompt.trim() && (
+              <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Press <span className="font-medium">⌘↵</span> to start with AI
+              </div>
             )}
           </div>
-          {/* Keyboard hint */}
-          {prompt.trim() && (
-            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              Press <span className="font-medium">⌘↵</span> to start with AI
-            </div>
-          )}
-        </div>
+        ) : hasApiKey === false ? (
+          <div
+            className="rounded-lg p-4 text-center"
+            style={{
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-secondary)',
+            }}
+          >
+            <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
+              Set up an API key to use the AI assistant
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onOpenSettings?.();
+                }}
+                className="underline hover:no-underline"
+                style={{ color: 'var(--accent-primary)' }}
+              >
+                Open Settings
+              </a>
+              {' '}to configure (⌘,)
+            </p>
+          </div>
+        ) : null}
 
         {/* Example prompts */}
         <div className="space-y-3">
@@ -136,13 +167,17 @@ export function WelcomeScreen({
             {EXAMPLE_PROMPTS.map((example, idx) => (
               <button
                 key={idx}
-                onClick={() => onStartWithPrompt(example)}
+                onClick={() => hasApiKey && onStartWithPrompt(example)}
+                disabled={!hasApiKey}
                 className="px-3 py-1.5 rounded-lg text-sm transition-colors border"
                 style={{
                   backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-secondary)',
+                  color: hasApiKey ? 'var(--text-secondary)' : 'var(--text-tertiary)',
                   borderColor: 'var(--border-secondary)',
+                  opacity: hasApiKey ? 1 : 0.5,
+                  cursor: hasApiKey ? 'pointer' : 'not-allowed',
                 }}
+                title={!hasApiKey ? 'Configure an API key in Settings to use AI' : example}
               >
                 {example}
               </button>

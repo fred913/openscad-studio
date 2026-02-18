@@ -13,17 +13,17 @@ import { Editor as MonacoEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import { registerVimConfigLanguage } from '../languages/vimConfigLanguage';
 import { TbPalette, TbCode, TbSparkles, TbX } from 'react-icons/tb';
+import { invalidateApiKeyStatus } from '../stores/apiKeyStore';
 
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSettingsChange?: (settings: Settings) => void;
+  initialTab?: SettingsSection;
 }
 
 function saveVimConfigIfChanged(
   localVimConfig: string,
-  currentSettings: Settings,
-  onSettingsChange?: (settings: Settings) => void
+  currentSettings: Settings
 ) {
   if (localVimConfig !== currentSettings.editor.vimConfig) {
     const updated = {
@@ -34,15 +34,14 @@ function saveVimConfigIfChanged(
       },
     };
     saveSettings(updated);
-    onSettingsChange?.(updated);
   }
 }
 
-type SettingsSection = 'appearance' | 'editor' | 'ai';
+export type SettingsSection = 'appearance' | 'editor' | 'ai';
 type EditorSubTab = 'general' | 'vim';
 
-export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDialogProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
+export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogProps) {
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialTab ?? 'appearance');
   const [editorSubTab, setEditorSubTab] = useState<EditorSubTab>('general');
   const [settings, setSettings] = useState<Settings>(loadSettings());
   const { updateTheme } = useTheme();
@@ -69,8 +68,9 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
       setSettings(loadedSettings);
       setLocalVimConfig(loadedSettings.editor.vimConfig);
       loadAISettings();
+      if (initialTab) setActiveSection(initialTab);
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab]);
 
   const loadAISettings = async () => {
     try {
@@ -106,9 +106,8 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
       },
     };
     setSettings(updated);
-    onSettingsChange?.(updated);
+    saveSettings(updated);
 
-    // Update theme via context (context handles persistence and applying CSS)
     if (key === 'theme') {
       updateTheme(value as string);
     }
@@ -127,7 +126,6 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
     };
     setSettings(updated);
     saveSettings(updated);
-    onSettingsChange?.(updated);
   };
 
   const handleSave = async () => {
@@ -142,6 +140,7 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
 
     try {
       await invoke('store_api_key', { provider, key: apiKey });
+      invalidateApiKeyStatus();
       setSuccessMessage(
         `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key saved successfully!`
       );
@@ -166,8 +165,10 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
   };
 
   const handleClear = async () => {
-    const confirmed = confirm(
-      `Are you sure you want to remove your ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key?`
+    const { confirm } = await import('@tauri-apps/plugin-dialog');
+    const confirmed = await confirm(
+      `Are you sure you want to remove your ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key?`,
+      { title: 'Remove API Key', kind: 'warning', okLabel: 'Remove', cancelLabel: 'Cancel' }
     );
     if (!confirmed) return;
 
@@ -177,6 +178,7 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
 
     try {
       await invoke('clear_api_key');
+      invalidateApiKeyStatus();
       setSuccessMessage('API key cleared successfully');
 
       // Update the appropriate key status
@@ -199,7 +201,7 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
 
   const handleClose = () => {
     // Save vim config changes before closing
-    saveVimConfigIfChanged(localVimConfig, settings, onSettingsChange);
+    saveVimConfigIfChanged(localVimConfig, settings);
     onClose();
   };
 
@@ -310,31 +312,77 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
             {activeSection === 'appearance' && (
               <div className="space-y-6">
                 {/* Theme Selector */}
-                <div
-                  className="rounded-lg p-4"
-                  style={{
-                    backgroundColor: 'var(--bg-primary)',
-                    border: '1px solid var(--border-primary)',
-                  }}
-                >
+                <div>
                   <Label>Theme</Label>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
                     Choose a color theme for the entire application
                   </p>
-                  <Select
-                    value={settings.appearance.theme}
-                    onChange={(e) => handleAppearanceSettingChange('theme', e.target.value)}
-                  >
-                    {availableThemes.map((section) => (
-                      <optgroup key={section.category} label={section.category}>
-                        {section.themes.map((theme) => (
-                          <option key={theme.id} value={theme.id}>
-                            {theme.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </Select>
+                  {availableThemes.map((section) => (
+                    <div key={section.category} className="mb-4">
+                      <div
+                        className="text-xs font-semibold uppercase tracking-wider mb-2"
+                        style={{ color: 'var(--text-tertiary)' }}
+                      >
+                        {section.category}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {section.themes.map((t) => {
+                          const themeData = getTheme(t.id);
+                          const isSelected = settings.appearance.theme === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => handleAppearanceSettingChange('theme', t.id)}
+                              className="flex flex-col rounded-md p-2.5 text-left transition-all duration-150"
+                              style={{
+                                backgroundColor: 'var(--bg-primary)',
+                                border: isSelected
+                                  ? '2px solid var(--accent-primary)'
+                                  : '1px solid var(--border-primary)',
+                                padding: isSelected ? 'calc(0.625rem - 1px)' : undefined,
+                                boxShadow: isSelected
+                                  ? '0 0 0 1px var(--accent-primary)'
+                                  : undefined,
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.transform = 'none';
+                                  e.currentTarget.style.boxShadow = 'none';
+                                }
+                              }}
+                            >
+                              <span
+                                className="text-xs mb-1.5 truncate w-full"
+                                style={{
+                                  color: 'var(--text-primary)',
+                                  fontWeight: isSelected ? 600 : 400,
+                                }}
+                              >
+                                {t.name}
+                              </span>
+                              <div
+                                className="flex h-3 rounded-sm overflow-hidden w-full"
+                              >
+                                <div className="flex-1" style={{ background: themeData.colors.bg.primary }} />
+                                <div className="flex-1" style={{ background: themeData.colors.accent.primary }} />
+                                <div className="flex-1" style={{ background: themeData.colors.text.primary }} />
+                                <div className="flex-1" style={{ background: themeData.colors.bg.secondary }} />
+                                <div className="flex-1" style={{ background: themeData.colors.semantic.error }} />
+                                <div className="flex-1" style={{ background: themeData.colors.semantic.success }} />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -437,6 +485,44 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                         onChange={(e) => handleEditorSettingChange('useTabs', e.target.checked)}
                       />
                     </div>
+
+                    <div
+                      className="flex items-center justify-between p-4"
+                      style={{ borderBottom: '1px solid var(--border-primary)' }}
+                    >
+                      <div>
+                        <Label className="mb-0">Auto-Render on Idle</Label>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                          Automatically render preview after you stop typing
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.editor.autoRenderOnIdle}
+                        onChange={(e) =>
+                          handleEditorSettingChange('autoRenderOnIdle', e.target.checked)
+                        }
+                      />
+                    </div>
+
+                    {settings.editor.autoRenderOnIdle && (
+                      <div
+                        className="p-4"
+                        style={{ borderBottom: '1px solid var(--border-primary)' }}
+                      >
+                        <Label>Render Delay</Label>
+                        <Select
+                          value={settings.editor.autoRenderDelayMs}
+                          onChange={(e) =>
+                            handleEditorSettingChange('autoRenderDelayMs', Number(e.target.value))
+                          }
+                        >
+                          <option value={300}>300ms (fast)</option>
+                          <option value={500}>500ms (default)</option>
+                          <option value={1000}>1 second</option>
+                          <option value={2000}>2 seconds</option>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 )}
 
