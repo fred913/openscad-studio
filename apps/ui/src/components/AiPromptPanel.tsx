@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 import type { Message, ToolCallMessage } from '../hooks/useAiAgent';
 import { Button } from './ui';
@@ -7,25 +6,21 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { ModelSelector } from './ModelSelector';
 import { useHistory } from '../hooks/useHistory';
 
-// Helper to extract image path from a tool result
-function getImagePathFromResult(result: unknown): string | null {
+function getImageDataUrlFromResult(result: unknown): string | null {
   if (!result) return null;
 
   if (typeof result === 'string') {
+    if (result.startsWith('data:image/')) return result;
     try {
       const parsed = JSON.parse(result);
-      if (parsed.image_path) {
-        return parsed.image_path;
-      }
+      if (parsed.image_data_url) return parsed.image_data_url;
     } catch {
-      if (result.endsWith('.png') || result.endsWith('.svg') || result.endsWith('.jpg')) {
-        return result;
-      }
+      /* empty */
     }
   }
 
-  if (typeof result === 'object' && result !== null && 'image_path' in result) {
-    return (result as { image_path: string }).image_path;
+  if (typeof result === 'object' && result !== null && 'image_data_url' in result) {
+    return (result as { image_data_url: string }).image_data_url;
   }
 
   return null;
@@ -88,7 +83,8 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
     }, [messages, streamingResponse]);
 
     useEffect(() => {
-      if (import.meta.env.DEV) console.log('[AiPromptPanel] Messages updated. Count:', messages.length);
+      if (import.meta.env.DEV)
+        console.log('[AiPromptPanel] Messages updated. Count:', messages.length);
     }, [messages]);
 
     const handleSubmit = () => {
@@ -272,14 +268,10 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
               // Tool call message (permanent, after completion)
               if (message.type === 'tool-call') {
                 const toolMessage = message as ToolCallMessage;
-                const imagePath =
+                const imageDataUrl =
                   toolMessage.toolName === 'get_preview_screenshot'
-                    ? getImagePathFromResult(toolMessage.result)
+                    ? getImageDataUrlFromResult(toolMessage.result)
                     : null;
-
-                if (imagePath && import.meta.env.DEV) {
-                  console.log('[AiPromptPanel] Image path:', imagePath);
-                }
 
                 return (
                   <div key={message.id} className="flex gap-2 justify-start">
@@ -334,26 +326,20 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                           </span>
                         )}
                       </div>
-                      {/* Display image for get_preview_screenshot tool */}
-                      {imagePath && (
+                      {imageDataUrl && (
                         <div className="mt-2">
                           <img
-                            src={`${convertFileSrc(imagePath)}?t=${Date.now()}`}
-                            alt={`Preview - ${toolMessage.args?.view || 'default'}`}
+                            src={imageDataUrl}
+                            alt="Preview screenshot"
                             className="max-w-full rounded border"
                             style={{
                               maxHeight: '300px',
                               borderColor: 'var(--border-secondary)',
                             }}
                             onError={(e) => {
-                              console.error('[AiPromptPanel] Failed to load image:', imagePath, e);
+                              console.error('[AiPromptPanel] Failed to load image:', e);
                             }}
                           />
-                          {typeof toolMessage.args?.view === 'string' && (
-                            <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                              View: {toolMessage.args.view}
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -369,9 +355,9 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
               <div className="flex gap-2 justify-start">
                 <div className="space-y-2">
                   {currentToolCalls.map((tool, idx) => {
-                    const imagePath =
+                    const imageDataUrl =
                       tool.name === 'get_preview_screenshot'
-                        ? getImagePathFromResult(tool.result)
+                        ? getImageDataUrlFromResult(tool.result)
                         : null;
 
                     return (
@@ -425,33 +411,20 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                             </span>
                           ) : null}
                         </div>
-                        {/* Display image for get_preview_screenshot tool */}
-                        {imagePath && (
+                        {imageDataUrl && (
                           <div className="mt-2">
                             <img
-                              src={`${convertFileSrc(imagePath)}?t=${Date.now()}`}
-                              alt={`Preview - ${tool.args?.view || 'default'}`}
+                              src={imageDataUrl}
+                              alt="Preview screenshot"
                               className="max-w-full rounded border"
                               style={{
                                 maxHeight: '300px',
                                 borderColor: 'var(--border-secondary)',
                               }}
                               onError={(e) => {
-                                console.error(
-                                  '[AiPromptPanel] Failed to load realtime image:',
-                                  imagePath,
-                                  e
-                                );
+                                console.error('[AiPromptPanel] Failed to load image:', e);
                               }}
                             />
-                            {typeof tool.args?.view === 'string' && (
-                              <div
-                                className="text-xs mt-1"
-                                style={{ color: 'var(--text-tertiary)' }}
-                              >
-                                View: {tool.args.view}
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>

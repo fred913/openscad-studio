@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { createOpenSCAD, type OpenSCAD } from 'openscad-wasm';
+import { createOpenSCAD } from 'openscad-wasm';
 
 declare const self: DedicatedWorkerGlobalScope;
 

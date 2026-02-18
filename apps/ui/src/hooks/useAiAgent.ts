@@ -1,24 +1,20 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { streamText, type ModelMessage, type ToolSet, stepCountIs } from 'ai';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import type { AiMode } from '../components/AiPromptPanel';
-import { validateModel, ModelValidation } from '../api/tauri';
-
-// Determine provider from model ID
-function getProviderFromModel(modelId: string): string {
-  if (modelId.startsWith('claude') || modelId.startsWith('anthropic')) {
-    return 'anthropic';
-  }
-  if (
-    modelId.startsWith('gpt') ||
-    modelId.startsWith('o1') ||
-    modelId.startsWith('o3') ||
-    modelId.startsWith('chatgpt')
-  ) {
-    return 'openai';
-  }
-  return 'anthropic'; // Default
-}
+import {
+  createModel,
+  SYSTEM_PROMPT,
+  buildTools,
+  type AiToolCallbacks,
+} from '../services/aiService';
+import {
+  getApiKey,
+  getAvailableProviders,
+  getProviderFromModel,
+  getStoredModel,
+  setStoredModel,
+} from '../stores/apiKeyStore';
 
 export interface ToolCall {
   name: string;
@@ -26,35 +22,30 @@ export interface ToolCall {
   result?: unknown;
 }
 
-// Base message type
 export interface BaseMessage {
   id: string;
   timestamp: number;
 }
 
-// User message
 export interface UserMessage extends BaseMessage {
   type: 'user';
   content: string;
-  checkpointId?: string; // Checkpoint ID from AI edits in response to this message
+  checkpointId?: string;
 }
 
-// Assistant text response
 export interface AssistantMessage extends BaseMessage {
   type: 'assistant';
   content: string;
 }
 
-// Tool call message
 export interface ToolCallMessage extends BaseMessage {
   type: 'tool-call';
   toolName: string;
   args?: Record<string, unknown>;
-  completed?: boolean; // Whether the tool has completed
-  result?: unknown; // The result of the tool call (for displaying images, etc.)
+  completed?: boolean;
+  result?: unknown;
 }
 
-// Tool result message
 export interface ToolResultMessage extends BaseMessage {
   type: 'tool-result';
   toolName: string;
@@ -62,14 +53,6 @@ export interface ToolResultMessage extends BaseMessage {
 }
 
 export type Message = UserMessage | AssistantMessage | ToolCallMessage | ToolResultMessage;
-
-// Legacy Message type for backward compatibility with saved conversations
-export interface LegacyMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-  toolCalls?: ToolCall[];
-}
 
 export interface Conversation {
   id: string;
@@ -90,77 +73,95 @@ export interface AiAgentState {
   messages: Message[];
   conversations: Conversation[];
   currentConversationId: string | null;
-  currentToolCalls: ToolCall[]; // Real-time tool calls for current streaming response
-  currentModel: string; // Currently selected model for this session
-  availableProviders: string[]; // Providers with API keys
+  currentToolCalls: ToolCall[];
+  currentModel: string;
+  availableProviders: string[];
 }
 
-interface StreamEvent {
-  type: 'text' | 'diff_proposed' | 'error' | 'done' | 'tool-call' | 'tool-result';
-  content?: string;
-  diff?: string;
-  rationale?: string;
-  error?: string;
-  toolName?: string;
-  args?: Record<string, unknown>;
-  result?: unknown;
-}
+function messagesToModelMessages(messages: Message[]): ModelMessage[] {
+  const modelMessages: ModelMessage[] = [];
+  let pendingToolCalls: Array<{
+    toolCallId: string;
+    toolName: string;
+    input: unknown;
+  }> = [];
+  let pendingToolResults: Array<{ toolCallId: string; toolName: string; result: unknown }> = [];
 
-// Helper to convert new message format to legacy format for backend
-function convertMessagesToLegacy(messages: Message[]): LegacyMessage[] {
-  const legacyMessages: LegacyMessage[] = [];
-  let currentAssistantContent = '';
-  let currentToolCalls: ToolCall[] = [];
-
-  for (const message of messages) {
-    if (message.type === 'user') {
-      // Flush any pending assistant message
-      if (currentAssistantContent || currentToolCalls.length > 0) {
-        legacyMessages.push({
-          role: 'assistant',
-          content: currentAssistantContent,
-          timestamp: Date.now(),
-          toolCalls: currentToolCalls.length > 0 ? currentToolCalls : undefined,
+  for (const msg of messages) {
+    if (msg.type === 'user') {
+      if (pendingToolCalls.length > 0) {
+        modelMessages.push({
+          role: 'assistant' as const,
+          content: pendingToolCalls.map((tc) => ({
+            type: 'tool-call' as const,
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            input: tc.input,
+          })),
         });
-        currentAssistantContent = '';
-        currentToolCalls = [];
+        modelMessages.push({
+          role: 'tool' as const,
+          content: pendingToolResults.map((tr) => ({
+            type: 'tool-result' as const,
+            toolCallId: tr.toolCallId,
+            toolName: tr.toolName,
+            output: {
+              type: 'text' as const,
+              value: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+            },
+          })),
+        });
+        pendingToolCalls = [];
+        pendingToolResults = [];
       }
-      // Add user message
-      legacyMessages.push({
-        role: 'user',
-        content: message.content,
-        timestamp: message.timestamp,
+      modelMessages.push({
+        role: 'user' as const,
+        content: [{ type: 'text' as const, text: msg.content }],
       });
-    } else if (message.type === 'assistant') {
-      // Accumulate assistant text
-      if (currentAssistantContent) currentAssistantContent += '\n';
-      currentAssistantContent += message.content;
-    } else if (message.type === 'tool-call') {
-      // Accumulate tool call
-      currentToolCalls.push({
-        name: message.toolName,
-        args: message.args,
+    } else if (msg.type === 'assistant') {
+      modelMessages.push({
+        role: 'assistant' as const,
+        content: [{ type: 'text' as const, text: msg.content }],
       });
-    } else if (message.type === 'tool-result') {
-      // Find matching tool call and add result
-      const toolCall = currentToolCalls.find((tc) => tc.name === message.toolName && !tc.result);
-      if (toolCall) {
-        toolCall.result = message.result;
-      }
+    } else if (msg.type === 'tool-call' && msg.completed) {
+      pendingToolCalls.push({
+        toolCallId: msg.id,
+        toolName: msg.toolName,
+        input: msg.args || {},
+      });
+      pendingToolResults.push({
+        toolCallId: msg.id,
+        toolName: msg.toolName,
+        result: msg.result,
+      });
     }
   }
 
-  // Flush final assistant message
-  if (currentAssistantContent || currentToolCalls.length > 0) {
-    legacyMessages.push({
-      role: 'assistant',
-      content: currentAssistantContent,
-      timestamp: Date.now(),
-      toolCalls: currentToolCalls.length > 0 ? currentToolCalls : undefined,
+  if (pendingToolCalls.length > 0) {
+    modelMessages.push({
+      role: 'assistant' as const,
+      content: pendingToolCalls.map((tc) => ({
+        type: 'tool-call' as const,
+        toolCallId: tc.toolCallId,
+        toolName: tc.toolName,
+        input: tc.input,
+      })),
+    });
+    modelMessages.push({
+      role: 'tool' as const,
+      content: pendingToolResults.map((tr) => ({
+        type: 'tool-result' as const,
+        toolCallId: tr.toolCallId,
+        toolName: tr.toolName,
+        output: {
+          type: 'text' as const,
+          value: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+        },
+      })),
     });
   }
 
-  return legacyMessages;
+  return modelMessages;
 }
 
 export function useAiAgent() {
@@ -174,446 +175,78 @@ export function useAiAgent() {
     conversations: [],
     currentConversationId: null,
     currentToolCalls: [],
-    currentModel: 'claude-sonnet-4-5-20250929', // Default, will be loaded from settings
-    availableProviders: [],
+    currentModel: getStoredModel(),
+    availableProviders: getAvailableProviders(),
   });
 
-  const sidecarRef = useRef<boolean | null>(null);
+  const sourceRef = useRef<string>('');
+  const capturePreviewRef = useRef<(() => Promise<string | null>) | null>(null);
+  const stlBlobUrlRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const streamBufferRef = useRef<string>('');
-  const lastChunkRef = useRef<string>('');
   const currentToolCallsRef = useRef<ToolCall[]>([]);
-  const lastModeRef = useRef<'text' | 'tool' | null>(null); // Track what we were doing last
-  const pendingCheckpointIdRef = useRef<string | null>(null); // Checkpoint ID from last tool result
+  const lastModeRef = useRef<'text' | 'tool' | null>(null);
+  const pendingCheckpointIdRef = useRef<string | null>(null);
 
-  const loadModelAndProviders = useCallback(async () => {
-    try {
-      // Load current model from settings
-      const model = await invoke<string>('get_ai_model');
+  const callbacks: AiToolCallbacks = useMemo(
+    () => ({
+      getCurrentCode: () => sourceRef.current,
+      captureCurrentView: async () => {
+        if (capturePreviewRef.current) {
+          return capturePreviewRef.current();
+        }
+        return null;
+      },
+      getStlBlobUrl: () => stlBlobUrlRef.current,
+    }),
+    []
+  );
 
-      // Load available providers
-      const providers = await invoke<string[]>('get_available_providers');
+  const tools: ToolSet = useMemo(() => buildTools(callbacks), [callbacks]);
 
-      setState((prev) => ({
-        ...prev,
-        currentModel: model,
-        availableProviders: providers,
-      }));
-
-      if (import.meta.env.DEV) console.log('[useAiAgent] Loaded model:', model, 'Available providers:', providers);
-    } catch (err) {
-      console.error('Failed to load model and providers:', err);
-    }
+  const updateSourceRef = useCallback((code: string) => {
+    sourceRef.current = code;
   }, []);
 
-  // Load conversations, model, and available providers on mount
+  const updateCapturePreview = useCallback((fn: (() => Promise<string | null>) | null) => {
+    capturePreviewRef.current = fn;
+  }, []);
+
+  const updateStlBlobUrl = useCallback((url: string | null) => {
+    stlBlobUrlRef.current = url;
+  }, []);
+
+  const loadModelAndProviders = useCallback(() => {
+    const model = getStoredModel();
+    const providers = getAvailableProviders();
+    setState((prev) => ({
+      ...prev,
+      currentModel: model,
+      availableProviders: providers,
+    }));
+    if (import.meta.env.DEV)
+      console.log('[useAiAgent] Loaded model:', model, 'Available providers:', providers);
+  }, []);
+
   useEffect(() => {
-    loadConversations();
     loadModelAndProviders();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for streaming events from sidecar
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-
-    const setupListener = async () => {
-      if (import.meta.env.DEV) console.log('[useAiAgent] Setting up ai-stream event listener');
-      unlisten = await listen<StreamEvent>('ai-stream', (event) => {
-        if (import.meta.env.DEV) console.log('[useAiAgent] Received ai-stream event:', event.payload);
-        const payload = event.payload;
-
-        switch (payload.type) {
-          case 'text':
-            if (payload.content) {
-              // Deduplicate: ignore if this is the same as the last chunk
-              if (payload.content === lastChunkRef.current) {
-                if (import.meta.env.DEV) console.log('[useAiAgent] Skipping duplicate chunk');
-                break;
-              }
-              lastChunkRef.current = payload.content;
-
-              // If we were in tool mode, flush the tools first
-              if (lastModeRef.current === 'tool' && currentToolCallsRef.current.length > 0) {
-                if (import.meta.env.DEV) console.log('[useAiAgent] Switching from tool to text mode, flushing tools');
-                // Add completed tools as permanent messages
-                const toolMessages = currentToolCallsRef.current.map((tool) => ({
-                  type: 'tool-call' as const,
-                  id: crypto.randomUUID(),
-                  timestamp: Date.now(),
-                  toolName: tool.name,
-                  args: tool.args,
-                  completed: !!tool.result,
-                  result: tool.result, // Include the result for displaying images
-                }));
-
-                setState((prev) => ({
-                  ...prev,
-                  messages: [...prev.messages, ...toolMessages],
-                  currentToolCalls: [],
-                }));
-                currentToolCallsRef.current = [];
-              }
-
-              // Now we're in text mode
-              lastModeRef.current = 'text';
-              streamBufferRef.current += payload.content;
-              setState((prev) => ({
-                ...prev,
-                streamingResponse: streamBufferRef.current,
-              }));
-            }
-            break;
-
-          case 'diff_proposed':
-            if (payload.diff && payload.rationale) {
-              setState((prev) => ({
-                ...prev,
-                proposedDiff: {
-                  diff: payload.diff!,
-                  rationale: payload.rationale!,
-                },
-                isStreaming: false,
-              }));
-              streamBufferRef.current = '';
-            }
-            break;
-
-          case 'tool-call': {
-            if (payload.toolName) {
-              if (import.meta.env.DEV) console.log('[useAiAgent] Tool call:', payload.toolName);
-
-              // If we were in text mode, flush the text first
-              if (lastModeRef.current === 'text' && streamBufferRef.current.trim()) {
-                if (import.meta.env.DEV) console.log('[useAiAgent] Switching from text to tool mode, flushing text');
-                const assistantMessage: AssistantMessage = {
-                  type: 'assistant',
-                  id: crypto.randomUUID(),
-                  content: streamBufferRef.current,
-                  timestamp: Date.now(),
-                };
-
-                setState((prev) => ({
-                  ...prev,
-                  messages: [...prev.messages, assistantMessage],
-                  streamingResponse: null,
-                }));
-                streamBufferRef.current = '';
-              }
-
-              // Now we're in tool mode
-              lastModeRef.current = 'tool';
-
-              // Track in currentToolCalls for real-time display
-              const newToolCall = {
-                name: payload.toolName,
-                args: payload.args,
-              };
-              currentToolCallsRef.current.push(newToolCall);
-              setState((prev) => ({
-                ...prev,
-                currentToolCalls: [...currentToolCallsRef.current],
-              }));
-            }
-            break;
-          }
-
-          case 'tool-result': {
-            if (payload.toolName) {
-              if (import.meta.env.DEV) console.log('[useAiAgent] Tool result:', payload.toolName);
-
-              // Check for checkpoint marker in result (from apply_edit tool)
-              if (payload.result && typeof payload.result === 'string') {
-                const checkpointMatch = payload.result.match(/\[CHECKPOINT:([\w-]+)\]/);
-                if (checkpointMatch) {
-                  pendingCheckpointIdRef.current = checkpointMatch[1];
-                  if (import.meta.env.DEV) {
-                    console.log(
-                      '[useAiAgent] Extracted checkpoint ID from tool result:',
-                      pendingCheckpointIdRef.current
-                    );
-                  }
-                }
-              }
-
-              // Update the tool call with result (for checkmark display)
-              const toolCall = currentToolCallsRef.current.find(
-                (tc) => tc.name === payload.toolName && !tc.result
-              );
-              if (toolCall) {
-                toolCall.result = payload.result;
-                setState((prev) => ({
-                  ...prev,
-                  currentToolCalls: [...currentToolCallsRef.current],
-                }));
-              }
-            }
-            break;
-          }
-
-          case 'error':
-            setState((prev) => ({
-              ...prev,
-              error: payload.error || 'Unknown error occurred',
-              isStreaming: false,
-            }));
-            streamBufferRef.current = '';
-            currentToolCallsRef.current = [];
-            setState((prev) => ({ ...prev, currentToolCalls: [] }));
-            break;
-
-          case 'done': {
-            if (import.meta.env.DEV) {
-              console.log('[useAiAgent] ===== DONE EVENT RECEIVED =====');
-              console.log('[useAiAgent] streamBufferRef.current:', streamBufferRef.current);
-              console.log('[useAiAgent] currentToolCallsRef.current:', currentToolCallsRef.current);
-              console.log('[useAiAgent] lastModeRef.current:', lastModeRef.current);
-            }
-
-            // Capture ref values before resetting
-            const finalStreamBuffer = streamBufferRef.current;
-            const finalToolCalls = [...currentToolCallsRef.current];
-
-            // Flush any remaining content
-            setState((prev) => {
-              if (import.meta.env.DEV) {
-                console.log(
-                  '[useAiAgent] Current messages count before flush:',
-                  prev.messages.length
-                );
-                console.log('[useAiAgent] Current streamingResponse:', prev.streamingResponse);
-              }
-
-              const newMessages = [...prev.messages];
-
-              // Flush remaining tools if any
-              if (finalToolCalls.length > 0) {
-                if (import.meta.env.DEV) console.log('[useAiAgent] Flushing', finalToolCalls.length, 'remaining tool calls');
-                const toolMessages = finalToolCalls.map((tool) => ({
-                  type: 'tool-call' as const,
-                  id: crypto.randomUUID(),
-                  timestamp: Date.now(),
-                  toolName: tool.name,
-                  args: tool.args,
-                  completed: !!tool.result,
-                  result: tool.result, // Include the result for displaying images
-                }));
-                newMessages.push(...toolMessages);
-              }
-
-              // Flush remaining text if any
-              if (finalStreamBuffer && finalStreamBuffer.trim()) {
-                if (import.meta.env.DEV) {
-                  console.log(
-                    '[useAiAgent] Flushing final text on done. Length:',
-                    finalStreamBuffer.length
-                  );
-                  console.log('[useAiAgent] Final text content:', finalStreamBuffer);
-                }
-                const assistantMessage: AssistantMessage = {
-                  type: 'assistant',
-                  id: crypto.randomUUID(),
-                  content: finalStreamBuffer,
-                  timestamp: Date.now(),
-                };
-
-                newMessages.push(assistantMessage);
-              } else if (import.meta.env.DEV) {
-                console.log(
-                  '[useAiAgent] No text to flush (finalStreamBuffer is empty or whitespace)'
-                );
-              }
-
-              // Attach checkpoint ID to the last user message if we have one
-              if (pendingCheckpointIdRef.current) {
-                if (import.meta.env.DEV) {
-                  console.log(
-                    '[useAiAgent] Attaching checkpoint ID to last user message:',
-                    pendingCheckpointIdRef.current
-                  );
-                }
-                // Find the last user message and attach checkpoint
-                for (let i = newMessages.length - 1; i >= 0; i--) {
-                  if (newMessages[i].type === 'user') {
-                    (newMessages[i] as UserMessage).checkpointId = pendingCheckpointIdRef.current;
-                    if (import.meta.env.DEV) {
-                      console.log(
-                        '[useAiAgent] Attached checkpoint to user message:',
-                        newMessages[i].id
-                      );
-                    }
-                    break;
-                  }
-                }
-                pendingCheckpointIdRef.current = null; // Clear after use
-              }
-
-              if (import.meta.env.DEV) {
-                console.log('[useAiAgent] Final messages count after flush:', newMessages.length);
-                console.log(
-                  '[useAiAgent] Final messages:',
-                  newMessages.map((m) => ({
-                    type: m.type,
-                    id: m.id,
-                    content: 'content' in m ? m.content.substring(0, 50) : 'N/A',
-                  }))
-                );
-              }
-
-              // Save conversation after adding message
-              setTimeout(() => void saveConversation(), 100);
-
-              return {
-                ...prev,
-                isStreaming: false,
-                streamingResponse: null,
-                messages: newMessages,
-                currentToolCalls: [], // Clear real-time tool calls
-              };
-            });
-
-            // Reset all refs AFTER capturing values
-            streamBufferRef.current = '';
-            currentToolCallsRef.current = [];
-            lastModeRef.current = null;
-            // Note: pendingCheckpointIdRef is cleared when attached to message, not here
-            if (import.meta.env.DEV) console.log('[useAiAgent] ===== DONE EVENT PROCESSED =====');
-            break;
-          }
-        }
-      });
-    };
-
-    setupListener();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load conversations from storage
-  const loadConversations = useCallback(async () => {
-    try {
-      const convos = await invoke<Conversation[]>('load_conversations');
-      setState((prev) => ({ ...prev, conversations: convos || [] }));
-    } catch (err) {
-      console.error('Failed to load conversations:', err);
-    }
-  }, []);
-
-  // Save current conversation
-  const saveConversation = useCallback(async () => {
-    if (!state.currentConversationId || state.messages.length === 0) return;
-
-    // Get title from first user message
-    const firstUserMessage = state.messages.find((m) => m.type === 'user') as
-      | UserMessage
-      | undefined;
-    const title = firstUserMessage?.content.slice(0, 50) || 'New Conversation';
-
-    const conversation: Conversation = {
-      id: state.currentConversationId,
-      title,
-      timestamp: Date.now(),
-      messages: state.messages,
-    };
-
-    try {
-      await invoke('save_conversation', { conversation });
-      await loadConversations();
-    } catch (err) {
-      console.error('Failed to save conversation:', err);
-    }
-  }, [state.currentConversationId, state.messages, loadConversations]);
-
-  // Start new conversation
-  const newConversation = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      currentConversationId: crypto.randomUUID(),
-      messages: [],
-      streamingResponse: null,
-      error: null,
-    }));
-  }, []);
-
-  // Load a conversation
-  const loadConversation = useCallback(
-    (conversationId: string) => {
-      const convo = state.conversations.find((c) => c.id === conversationId);
-      if (convo) {
-        setState((prev) => ({
-          ...prev,
-          currentConversationId: convo.id,
-          messages: convo.messages,
-          streamingResponse: null,
-          error: null,
-        }));
-      }
-    },
-    [state.conversations]
-  );
-
-  // Submit prompt to AI agent
   const submitPrompt = useCallback(
-    async (prompt: string, mode: AiMode) => {
-      if (import.meta.env.DEV) console.log('[useAiAgent] submitPrompt called', { prompt, mode });
+    async (prompt: string, _mode: AiMode) => {
+      if (import.meta.env.DEV) console.log('[useAiAgent] submitPrompt called', { prompt });
 
-      // Check if API key exists
-      try {
-        if (import.meta.env.DEV) console.log('[useAiAgent] Checking for API key...');
-        const hasKey = await invoke<boolean>('has_api_key');
-        if (import.meta.env.DEV) console.log('[useAiAgent] Has API key:', hasKey);
-        if (!hasKey) {
-          setState((prev) => ({
-            ...prev,
-            error: 'Please set your API key in Settings first',
-          }));
-          return;
-        }
-      } catch (err) {
-        console.error('[useAiAgent] Failed to check API key:', err);
+      const provider = getProviderFromModel(state.currentModel);
+      const apiKey = getApiKey(provider);
+
+      if (!apiKey) {
         setState((prev) => ({
           ...prev,
-          error: `Failed to check API key: ${err}`,
+          error: 'Please set your API key in Settings first',
         }));
         return;
       }
 
-      // Lazy validation: check if the current model is still available
-      let modelToUse = state.currentModel;
-      try {
-        if (import.meta.env.DEV) console.log('[useAiAgent] Validating model:', state.currentModel);
-        const validation: ModelValidation = await validateModel(state.currentModel);
-        if (!validation.is_valid) {
-          console.warn(
-            '[useAiAgent] Model not available:',
-            state.currentModel,
-            'falling back to:',
-            validation.fallback_model
-          );
-          const fallback = validation.fallback_model || 'claude-sonnet-4-5';
-          modelToUse = fallback;
-
-          // Update state with fallback model
-          setState((prev) => ({
-            ...prev,
-            currentModel: fallback,
-            error: `Model "${state.currentModel}" is no longer available. Switched to "${fallback}".`,
-          }));
-
-          // Persist the new model selection
-          await invoke('set_ai_model', { model: fallback });
-        }
-      } catch (err) {
-        console.warn('[useAiAgent] Model validation failed, continuing with current model:', err);
-        // Continue with current model if validation fails - it might still work
-      }
-
-      // Create new conversation if needed
-      const conversationId = state.currentConversationId || crypto.randomUUID();
-
-      // Add user message
       const userMessage: UserMessage = {
         type: 'user',
         id: crypto.randomUUID(),
@@ -623,193 +256,241 @@ export function useAiAgent() {
 
       const updatedMessages = [...state.messages, userMessage];
 
-      // Reset streaming state
-      if (import.meta.env.DEV) console.log('[useAiAgent] Starting stream with', updatedMessages.length, 'messages');
       setState((prev) => ({
         ...prev,
         isStreaming: true,
         streamingResponse: '',
-        proposedDiff: null,
         error: null,
-        isApplyingDiff: false,
         messages: updatedMessages,
-        currentConversationId: conversationId,
-        currentToolCalls: [], // Reset real-time tool calls
+        currentToolCalls: [],
       }));
       streamBufferRef.current = '';
-      lastChunkRef.current = '';
       currentToolCallsRef.current = [];
       lastModeRef.current = null;
       pendingCheckpointIdRef.current = null;
 
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       try {
-        // Start sidecar if not running
-        if (!sidecarRef.current) {
-          if (import.meta.env.DEV) console.log('[useAiAgent] Starting sidecar...');
-          const provider = await invoke<string>('get_ai_provider');
-          const apiKey = await invoke<string>('get_api_key');
-          const model = await invoke<string>('get_ai_model');
-          if (import.meta.env.DEV) console.log('[useAiAgent] Got API key for provider:', provider, 'model:', model);
-          await invoke('start_ai_agent', { apiKey, provider });
-          if (import.meta.env.DEV) console.log('[useAiAgent] Sidecar started successfully');
-          sidecarRef.current = true;
-        } else {
-          if (import.meta.env.DEV) console.log('[useAiAgent] Sidecar already running');
-        }
+        const model = createModel(provider, apiKey, state.currentModel);
+        const modelMessages = messagesToModelMessages(updatedMessages);
 
-        // Convert to legacy format for backend
-        const legacyMessages = convertMessagesToLegacy(updatedMessages);
-
-        // Determine provider from current model
-        const provider = getProviderFromModel(modelToUse) || 'anthropic';
-
-        // Send query to sidecar with full message history, current model, and provider
-        if (import.meta.env.DEV) {
-          console.log(
-            '[useAiAgent] Sending query to sidecar with',
-            legacyMessages.length,
-            'messages',
-            'using model:',
-            modelToUse,
-            'provider:',
-            provider
-          );
-        }
-        await invoke('send_ai_query', {
-          messages: legacyMessages,
-          model: modelToUse,
-          provider,
-          mode,
+        const result = streamText({
+          model,
+          system: SYSTEM_PROMPT,
+          messages: modelMessages,
+          tools,
+          stopWhen: stepCountIs(10),
+          abortSignal: abortController.signal,
         });
-        if (import.meta.env.DEV) console.log('[useAiAgent] Query sent successfully');
+
+        for await (const chunk of result.fullStream) {
+          if (abortController.signal.aborted) break;
+
+          if (chunk.type === 'text-delta') {
+            if (lastModeRef.current === 'tool' && currentToolCallsRef.current.length > 0) {
+              const toolMessages: ToolCallMessage[] = currentToolCallsRef.current.map((tc) => ({
+                type: 'tool-call' as const,
+                id: crypto.randomUUID(),
+                timestamp: Date.now(),
+                toolName: tc.name,
+                args: tc.args,
+                completed: !!tc.result,
+                result: tc.result,
+              }));
+              setState((prev) => ({
+                ...prev,
+                messages: [...prev.messages, ...toolMessages],
+                currentToolCalls: [],
+              }));
+              currentToolCallsRef.current = [];
+            }
+
+            lastModeRef.current = 'text';
+            streamBufferRef.current += chunk.text;
+            setState((prev) => ({
+              ...prev,
+              streamingResponse: streamBufferRef.current,
+            }));
+          } else if (chunk.type === 'tool-call') {
+            if (lastModeRef.current === 'text' && streamBufferRef.current.trim()) {
+              const assistantMessage: AssistantMessage = {
+                type: 'assistant',
+                id: crypto.randomUUID(),
+                content: streamBufferRef.current,
+                timestamp: Date.now(),
+              };
+              setState((prev) => ({
+                ...prev,
+                messages: [...prev.messages, assistantMessage],
+                streamingResponse: null,
+              }));
+              streamBufferRef.current = '';
+            }
+
+            lastModeRef.current = 'tool';
+            const newToolCall: ToolCall = {
+              name: chunk.toolName,
+              args: (chunk as { input?: unknown }).input as Record<string, unknown>,
+            };
+            currentToolCallsRef.current.push(newToolCall);
+            setState((prev) => ({
+              ...prev,
+              currentToolCalls: [...currentToolCallsRef.current],
+            }));
+          } else if (chunk.type === 'tool-result') {
+            const output = (chunk as { output?: unknown }).output;
+            const resultStr = typeof output === 'string' ? output : JSON.stringify(output);
+            const checkpointMatch = resultStr?.match(/\[CHECKPOINT:([\w-]+)\]/);
+            if (checkpointMatch) {
+              pendingCheckpointIdRef.current = checkpointMatch[1];
+            }
+
+            const tc = currentToolCallsRef.current.find(
+              (t) => t.name === chunk.toolName && !t.result
+            );
+            if (tc) {
+              tc.result = output;
+              setState((prev) => ({
+                ...prev,
+                currentToolCalls: [...currentToolCallsRef.current],
+              }));
+            }
+          } else if (chunk.type === 'error') {
+            console.error('[useAiAgent] Stream error:', chunk.error);
+          }
+        }
+
+        const finalStreamBuffer = streamBufferRef.current;
+        const finalToolCalls = [...currentToolCallsRef.current];
+
+        setState((prev) => {
+          const newMessages = [...prev.messages];
+
+          if (finalToolCalls.length > 0) {
+            const toolMessages: ToolCallMessage[] = finalToolCalls.map((tc) => ({
+              type: 'tool-call' as const,
+              id: crypto.randomUUID(),
+              timestamp: Date.now(),
+              toolName: tc.name,
+              args: tc.args,
+              completed: !!tc.result,
+              result: tc.result,
+            }));
+            newMessages.push(...toolMessages);
+          }
+
+          if (finalStreamBuffer && finalStreamBuffer.trim()) {
+            newMessages.push({
+              type: 'assistant',
+              id: crypto.randomUUID(),
+              content: finalStreamBuffer,
+              timestamp: Date.now(),
+            });
+          }
+
+          if (pendingCheckpointIdRef.current) {
+            for (let i = newMessages.length - 1; i >= 0; i--) {
+              if (newMessages[i].type === 'user') {
+                (newMessages[i] as UserMessage).checkpointId = pendingCheckpointIdRef.current;
+                break;
+              }
+            }
+            pendingCheckpointIdRef.current = null;
+          }
+
+          return {
+            ...prev,
+            isStreaming: false,
+            streamingResponse: null,
+            messages: newMessages,
+            currentToolCalls: [],
+          };
+        });
+
+        streamBufferRef.current = '';
+        currentToolCallsRef.current = [];
+        lastModeRef.current = null;
       } catch (err) {
+        if (abortController.signal.aborted) {
+          if (import.meta.env.DEV) console.log('[useAiAgent] Stream was cancelled');
+          return;
+        }
         console.error('[useAiAgent] Error submitting prompt:', err);
         setState((prev) => ({
           ...prev,
-          error: `Failed to submit prompt: ${err}`,
+          error: `Failed: ${err instanceof Error ? err.message : String(err)}`,
           isStreaming: false,
+          streamingResponse: null,
+          currentToolCalls: [],
         }));
         streamBufferRef.current = '';
+        currentToolCallsRef.current = [];
+        lastModeRef.current = null;
+      } finally {
+        abortControllerRef.current = null;
       }
     },
-    [state.currentConversationId, state.messages, state.currentModel]
+    [state.currentModel, state.messages, tools]
   );
 
-  // Cancel streaming
-  const cancelStream = useCallback(async () => {
-    try {
-      if (import.meta.env.DEV) console.log('[useAiAgent] Cancelling stream...');
-      await invoke('cancel_ai_stream');
-
-      // Reset all streaming state
-      setState((prev) => ({
-        ...prev,
-        isStreaming: false,
-        streamingResponse: null,
-        currentToolCalls: [],
-      }));
-
-      // Reset refs
-      streamBufferRef.current = '';
-      currentToolCallsRef.current = [];
-      lastModeRef.current = null;
-      lastChunkRef.current = '';
-      pendingCheckpointIdRef.current = null;
-
-      if (import.meta.env.DEV) console.log('[useAiAgent] Stream cancelled successfully');
-    } catch (err) {
-      console.error('Failed to cancel stream:', err);
+  const cancelStream = useCallback(() => {
+    if (import.meta.env.DEV) console.log('[useAiAgent] Cancelling stream...');
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
-  }, []);
-
-  // Accept proposed diff
-  const acceptDiff = useCallback(async () => {
-    if (!state.proposedDiff) return;
-
     setState((prev) => ({
       ...prev,
-      isApplyingDiff: true,
-      error: null,
+      isStreaming: false,
+      streamingResponse: null,
+      currentToolCalls: [],
     }));
-
-    try {
-      const result = await invoke<{
-        success: boolean;
-        error?: string;
-      }>('apply_diff', {
-        diff: state.proposedDiff.diff,
-        openscadPath: 'openscad', // TODO: Get from app state
-      });
-
-      if (result.success) {
-        // Clear diff on success
-        setState((prev) => ({
-          ...prev,
-          proposedDiff: null,
-          isApplyingDiff: false,
-        }));
-      } else {
-        setState((prev) => ({
-          ...prev,
-          error: result.error || 'Failed to apply diff',
-          isApplyingDiff: false,
-        }));
-      }
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        error: `Failed to apply diff: ${err}`,
-        isApplyingDiff: false,
-      }));
-    }
-  }, [state.proposedDiff]);
-
-  // Reject proposed diff
-  const rejectDiff = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      proposedDiff: null,
-    }));
+    streamBufferRef.current = '';
+    currentToolCallsRef.current = [];
+    lastModeRef.current = null;
+    pendingCheckpointIdRef.current = null;
   }, []);
 
-  // Clear error
+  const acceptDiff = useCallback(() => {}, []);
+  const rejectDiff = useCallback(() => {}, []);
+
   const clearError = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      error: null,
-    }));
+    setState((prev) => ({ ...prev, error: null }));
   }, []);
 
-  // Set current model and persist to backend
-  const setCurrentModel = useCallback(async (model: string) => {
+  const setCurrentModel = useCallback((model: string) => {
     if (import.meta.env.DEV) console.log('[useAiAgent] Setting current model to:', model);
-    setState((prev) => ({
-      ...prev,
-      currentModel: model,
-    }));
-
-    // Persist the model selection to backend storage
-    try {
-      await invoke('set_ai_model', { model });
-      if (import.meta.env.DEV) console.log('[useAiAgent] Model persisted to backend:', model);
-    } catch (err) {
-      console.error('[useAiAgent] Failed to persist model:', err);
-    }
+    setState((prev) => ({ ...prev, currentModel: model }));
+    setStoredModel(model);
   }, []);
 
-  // Handle checkpoint restoration with conversation truncation
+  const newConversation = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      messages: [],
+      streamingResponse: null,
+      error: null,
+      currentToolCalls: [],
+    }));
+  }, []);
+
   const handleRestoreCheckpoint = useCallback(
-    (checkpointId: string, truncatedMessages: Message[]) => {
-      if (import.meta.env.DEV) console.log('[useAiAgent] Restoring checkpoint and truncating conversation:', checkpointId);
+    async (checkpointId: string, truncatedMessages: Message[]) => {
+      if (import.meta.env.DEV) console.log('[useAiAgent] Restoring checkpoint:', checkpointId);
+
+      try {
+        await invoke('restore_to_checkpoint', { checkpointId });
+      } catch (err) {
+        console.error('[useAiAgent] Failed to restore checkpoint via invoke:', err);
+      }
+
       setState((prev) => ({
         ...prev,
         messages: truncatedMessages,
       }));
-
-      // Save the truncated conversation
-      setTimeout(() => void saveConversation(), 100);
     },
-    [saveConversation]
+    []
   );
 
   return {
@@ -820,10 +501,13 @@ export function useAiAgent() {
     rejectDiff,
     clearError,
     newConversation,
-    loadConversation,
-    saveConversation,
+    loadConversation: (_id: string) => {},
+    saveConversation: async () => {},
     setCurrentModel,
     loadModelAndProviders,
     handleRestoreCheckpoint,
+    updateSourceRef,
+    updateCapturePreview,
+    updateStlBlobUrl,
   };
 }

@@ -66,7 +66,9 @@ function App() {
 
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsSection | undefined>(undefined);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsSection | undefined>(
+    undefined
+  );
   const [settings] = useSettings();
 
   const {
@@ -107,6 +109,10 @@ function App() {
     newConversation,
     setCurrentModel,
     handleRestoreCheckpoint,
+    updateSourceRef,
+    updateCapturePreview,
+    updateStlBlobUrl,
+    loadModelAndProviders,
   } = useAiAgent();
 
   // Tab management functions
@@ -250,8 +256,6 @@ function App() {
 
   // Note: Tree-sitter formatter is initialized in main.tsx for optimal performance
 
-
-
   // Use refs to avoid stale closures in event listeners
   const activeTabRef = useRef<Tab>(activeTab);
   const tabsRef = useRef<Tab[]>(tabs);
@@ -271,8 +275,61 @@ function App() {
 
   useEffect(() => {
     sourceRef.current = source;
-  }, [source]);
+    updateSourceRef(source);
+  }, [source, updateSourceRef]);
 
+  useEffect(() => {
+    updateStlBlobUrl(previewKind === 'mesh' && previewSrc ? previewSrc : null);
+  }, [previewSrc, previewKind, updateStlBlobUrl]);
+  useEffect(() => {
+    updateCapturePreview(async () => {
+      // Try to capture the Three.js WebGL canvas (3D preview)
+      const canvas = document.querySelector('canvas[data-engine]') as HTMLCanvasElement | null;
+      if (canvas) {
+        try {
+          return canvas.toDataURL('image/png');
+        } catch (e) {
+          if (import.meta.env.DEV) console.warn('[App] Failed to capture 3D canvas:', e);
+        }
+      }
+
+      const svgElement = document.querySelector('[data-preview-svg] svg') as SVGSVGElement | null;
+      if (svgElement) {
+        try {
+          const serializer = new XMLSerializer();
+          const svgString = serializer.serializeToString(svgElement);
+          const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(svgBlob);
+          const img = new Image();
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            img.onload = () => {
+              const c = document.createElement('canvas');
+              c.width = img.naturalWidth || 800;
+              c.height = img.naturalHeight || 600;
+              const ctx = c.getContext('2d');
+              if (ctx) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0);
+                resolve(c.toDataURL('image/png'));
+              } else {
+                reject(new Error('Could not get 2d context'));
+              }
+            };
+            img.onerror = reject;
+            img.src = url;
+          });
+          URL.revokeObjectURL(url);
+          return dataUrl;
+        } catch (e) {
+          if (import.meta.env.DEV) console.warn('[App] Failed to capture SVG preview:', e);
+        }
+      }
+
+      return null;
+    });
+    return () => updateCapturePreview(null);
+  }, [updateCapturePreview]);
 
   useEffect(() => {
     workingDirRef.current = workingDir;
@@ -319,7 +376,8 @@ function App() {
       tabSwitchRenderTimerRef.current = window.setTimeout(() => {
         if (manualRenderRef.current) {
           const currentTab = tabs.find((t) => t.id === activeTabId);
-          if (import.meta.env.DEV) console.log('[App] Auto-rendering after tab change to:', currentTab?.name);
+          if (import.meta.env.DEV)
+            console.log('[App] Auto-rendering after tab change to:', currentTab?.name);
           manualRenderRef.current();
         }
         tabSwitchRenderTimerRef.current = null;
@@ -718,7 +776,7 @@ function App() {
 
           const exportBytes = await RenderService.getInstance().exportModel(
             sourceRef.current,
-            format as 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf',
+            format as 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf'
           );
           // Write bytes to disk via Tauri
           const { writeFile } = await import('@tauri-apps/plugin-fs');
@@ -978,8 +1036,6 @@ function App() {
     ]
   );
 
-
-
   // Show welcome screen if no file is open and welcome hasn't been dismissed
   if (showWelcome) {
     return (
@@ -1000,6 +1056,7 @@ function App() {
           onClose={() => {
             setShowSettingsDialog(false);
             setSettingsInitialTab(undefined);
+            loadModelAndProviders();
           }}
           initialTab={settingsInitialTab}
         />
@@ -1136,6 +1193,7 @@ function App() {
         onClose={() => {
           setShowSettingsDialog(false);
           setSettingsInitialTab(undefined);
+          loadModelAndProviders();
         }}
         initialTab={settingsInitialTab}
       />

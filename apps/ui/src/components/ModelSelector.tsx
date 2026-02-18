@@ -50,7 +50,6 @@ export function ModelSelector({
             {anthropicModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.display_name}
-                {model.model_type === 'alias' ? ' *' : ''}
               </option>
             ))}
           </optgroup>
@@ -60,7 +59,6 @@ export function ModelSelector({
             {openaiModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.display_name}
-                {model.model_type === 'alias' ? ' *' : ''}
               </option>
             ))}
           </optgroup>

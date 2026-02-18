@@ -186,7 +186,11 @@ export function ThreeViewer({ stlPath, isLoading }: ThreeViewerProps) {
         </button>
       </div>
 
-      <Canvas shadows style={{ width: '100%', height: '100%', background: themeColors.background }}>
+      <Canvas
+        shadows
+        gl={{ preserveDrawingBuffer: true }}
+        style={{ width: '100%', height: '100%', background: themeColors.background }}
+      >
         {/* Camera */}
         {orthographic ? (
           <OrthographicCamera

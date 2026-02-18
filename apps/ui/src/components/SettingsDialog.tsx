@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import {
   loadSettings,
   saveSettings,
@@ -13,7 +12,13 @@ import { Editor as MonacoEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import { registerVimConfigLanguage } from '../languages/vimConfigLanguage';
 import { TbPalette, TbCode, TbSparkles, TbX } from 'react-icons/tb';
-import { invalidateApiKeyStatus } from '../stores/apiKeyStore';
+import {
+  invalidateApiKeyStatus,
+  storeApiKey as storeApiKeyToStorage,
+  clearApiKey as clearApiKeyFromStorage,
+  hasApiKeyForProvider,
+  getAvailableProviders as getAvailableProvidersFromStore,
+} from '../stores/apiKeyStore';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -21,10 +26,7 @@ interface SettingsDialogProps {
   initialTab?: SettingsSection;
 }
 
-function saveVimConfigIfChanged(
-  localVimConfig: string,
-  currentSettings: Settings
-) {
+function saveVimConfigIfChanged(localVimConfig: string, currentSettings: Settings) {
   if (localVimConfig !== currentSettings.editor.vimConfig) {
     const updated = {
       ...currentSettings,
@@ -56,7 +58,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
   const [apiKey, setApiKey] = useState('');
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAIKey, setHasOpenAIKey] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, _setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
@@ -72,25 +74,16 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
     }
   }, [isOpen, initialTab]);
 
-  const loadAISettings = async () => {
-    try {
-      // Check which providers have keys
-      const availableProviders = await invoke<string[]>('get_available_providers');
-      setHasAnthropicKey(availableProviders.includes('anthropic'));
-      setHasOpenAIKey(availableProviders.includes('openai'));
+  const loadAISettings = () => {
+    const availableProviders = getAvailableProvidersFromStore();
+    setHasAnthropicKey(availableProviders.includes('anthropic'));
+    setHasOpenAIKey(availableProviders.includes('openai'));
 
-      const currentProvider = await invoke<string>('get_ai_provider');
-      setProvider(currentProvider as 'anthropic' | 'openai');
-
-      // Load the masked key for the current provider if it exists
-      const hasCurrentKey = availableProviders.includes(currentProvider);
-      if (hasCurrentKey) {
-        setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
-      } else {
-        setApiKey('');
-      }
-    } catch (err) {
-      console.error('Failed to load AI settings:', err);
+    const hasCurrentKey = hasApiKeyForProvider(provider);
+    if (hasCurrentKey) {
+      setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
+    } else {
+      setApiKey('');
     }
   };
 
@@ -128,40 +121,32 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
     saveSettings(updated);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!apiKey.trim() || apiKey.startsWith('•')) {
       setError('Please enter a valid API key');
       return;
     }
 
-    setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
-    try {
-      await invoke('store_api_key', { provider, key: apiKey });
-      invalidateApiKeyStatus();
-      setSuccessMessage(
-        `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key saved successfully!`
-      );
+    storeApiKeyToStorage(provider, apiKey);
+    invalidateApiKeyStatus();
+    setSuccessMessage(
+      `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key saved successfully!`
+    );
 
-      // Update the appropriate key status
-      if (provider === 'anthropic') {
-        setHasAnthropicKey(true);
-      } else {
-        setHasOpenAIKey(true);
-      }
-
-      setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
-      setShowKey(false);
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    } catch (err) {
-      setError(`Failed to save API key: ${err}`);
-    } finally {
-      setIsLoading(false);
+    if (provider === 'anthropic') {
+      setHasAnthropicKey(true);
+    } else {
+      setHasOpenAIKey(true);
     }
+
+    setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
+    setShowKey(false);
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
   };
 
   const handleClear = async () => {
@@ -172,31 +157,23 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
     );
     if (!confirmed) return;
 
-    setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
-    try {
-      await invoke('clear_api_key');
-      invalidateApiKeyStatus();
-      setSuccessMessage('API key cleared successfully');
+    clearApiKeyFromStorage(provider);
+    invalidateApiKeyStatus();
+    setSuccessMessage('API key cleared successfully');
 
-      // Update the appropriate key status
-      if (provider === 'anthropic') {
-        setHasAnthropicKey(false);
-      } else {
-        setHasOpenAIKey(false);
-      }
-
-      setApiKey('');
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    } catch (err) {
-      setError(`Failed to clear API key: ${err}`);
-    } finally {
-      setIsLoading(false);
+    if (provider === 'anthropic') {
+      setHasAnthropicKey(false);
+    } else {
+      setHasOpenAIKey(false);
     }
+
+    setApiKey('');
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
   };
 
   const handleClose = () => {
@@ -367,15 +344,31 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                               >
                                 {t.name}
                               </span>
-                              <div
-                                className="flex h-3 rounded-sm overflow-hidden w-full"
-                              >
-                                <div className="flex-1" style={{ background: themeData.colors.bg.primary }} />
-                                <div className="flex-1" style={{ background: themeData.colors.accent.primary }} />
-                                <div className="flex-1" style={{ background: themeData.colors.text.primary }} />
-                                <div className="flex-1" style={{ background: themeData.colors.bg.secondary }} />
-                                <div className="flex-1" style={{ background: themeData.colors.semantic.error }} />
-                                <div className="flex-1" style={{ background: themeData.colors.semantic.success }} />
+                              <div className="flex h-3 rounded-sm overflow-hidden w-full">
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.bg.primary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.accent.primary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.text.primary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.bg.secondary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.semantic.error }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.semantic.success }}
+                                />
                               </div>
                             </button>
                           );

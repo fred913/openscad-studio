@@ -52,7 +52,8 @@ export function SvgViewer({ src }: SvgViewerProps) {
           minY = y;
           width = w;
           height = h;
-          if (import.meta.env.DEV) console.log('[SvgViewer] ViewBox parsed:', { x, y, width, height });
+          if (import.meta.env.DEV)
+            console.log('[SvgViewer] ViewBox parsed:', { x, y, width, height });
         }
 
         // Calculate stroke width relative to viewBox (very thin axes)
@@ -236,7 +237,11 @@ export function SvgViewer({ src }: SvgViewerProps) {
               wrapperClass="!w-full !h-full"
               contentClass="!w-full !h-full flex items-center justify-center"
             >
-              <div className="w-full h-full" dangerouslySetInnerHTML={{ __html: svgContent }} />
+              <div
+                className="w-full h-full"
+                data-preview-svg
+                dangerouslySetInnerHTML={{ __html: svgContent }}
+              />
             </TransformComponent>
           </>
         )}
