@@ -65,7 +65,7 @@ export interface Theme {
 export const solarizedDark: Theme = {
   id: 'solarized-dark',
   name: 'Solarized Dark',
-  category: 'Classic',
+  category: 'Dark',
   monaco: 'solarized-dark',
   colors: {
     bg: {
@@ -135,7 +135,7 @@ export const solarizedDark: Theme = {
 export const solarizedLight: Theme = {
   id: 'solarized-light',
   name: 'Solarized Light',
-  category: 'Classic',
+  category: 'Light',
   monaco: 'solarized-light',
   colors: {
     bg: {
@@ -205,7 +205,7 @@ export const solarizedLight: Theme = {
 export const monokai: Theme = {
   id: 'monokai',
   name: 'Monokai',
-  category: 'Popular Dark',
+  category: 'Dark',
   monaco: 'monokai',
   colors: {
     bg: {
@@ -275,7 +275,7 @@ export const monokai: Theme = {
 export const dracula: Theme = {
   id: 'dracula',
   name: 'Dracula',
-  category: 'Popular Dark',
+  category: 'Dark',
   monaco: 'dracula',
   colors: {
     bg: {
@@ -345,7 +345,7 @@ export const dracula: Theme = {
 export const oneDarkPro: Theme = {
   id: 'one-dark-pro',
   name: 'One Dark Pro',
-  category: 'Popular Dark',
+  category: 'Dark',
   monaco: 'one-dark-pro',
   colors: {
     bg: {
@@ -415,7 +415,7 @@ export const oneDarkPro: Theme = {
 export const githubDark: Theme = {
   id: 'github-dark',
   name: 'GitHub Dark',
-  category: 'Popular Dark',
+  category: 'Dark',
   monaco: 'github-dark',
   colors: {
     bg: {
@@ -485,7 +485,7 @@ export const githubDark: Theme = {
 export const githubLight: Theme = {
   id: 'github-light',
   name: 'GitHub Light',
-  category: 'Popular Light',
+  category: 'Light',
   monaco: 'github-light',
   colors: {
     bg: {
@@ -555,7 +555,7 @@ export const githubLight: Theme = {
 export const nord: Theme = {
   id: 'nord',
   name: 'Nord',
-  category: 'Pastel & Cozy',
+  category: 'Cool',
   monaco: 'nord',
   colors: {
     bg: {
@@ -625,7 +625,7 @@ export const nord: Theme = {
 export const tokyoNight: Theme = {
   id: 'tokyo-night',
   name: 'Tokyo Night',
-  category: 'Popular Dark',
+  category: 'Dark',
   monaco: 'tokyo-night',
   colors: {
     bg: {
@@ -695,7 +695,7 @@ export const tokyoNight: Theme = {
 export const gruvboxDark: Theme = {
   id: 'gruvbox-dark',
   name: 'Gruvbox Dark',
-  category: 'Retro',
+  category: 'Warm',
   monaco: 'gruvbox-dark',
   colors: {
     bg: {
@@ -765,7 +765,7 @@ export const gruvboxDark: Theme = {
 export const gruvboxLight: Theme = {
   id: 'gruvbox-light',
   name: 'Gruvbox Light',
-  category: 'Retro',
+  category: 'Light',
   monaco: 'gruvbox-light',
   colors: {
     bg: {
@@ -835,7 +835,7 @@ export const gruvboxLight: Theme = {
 export const catppuccinMocha: Theme = {
   id: 'catppuccin-mocha',
   name: 'Catppuccin Mocha',
-  category: 'Pastel & Cozy',
+  category: 'Warm',
   monaco: 'catppuccin-mocha',
   colors: {
     bg: { primary: '#1e1e2e', secondary: '#181825', tertiary: '#313244', elevated: '#1e1e2e' },
@@ -877,7 +877,7 @@ export const catppuccinMocha: Theme = {
 export const ayuDark: Theme = {
   id: 'ayu-dark',
   name: 'Ayu Dark',
-  category: 'Popular Dark',
+  category: 'Cool',
   monaco: 'ayu-dark',
   colors: {
     bg: { primary: '#0a0e14', secondary: '#01060e', tertiary: '#273747', elevated: '#11151c' },
@@ -919,7 +919,7 @@ export const ayuDark: Theme = {
 export const materialPalenight: Theme = {
   id: 'material-palenight',
   name: 'Material Palenight',
-  category: 'Popular Dark',
+  category: 'Cool',
   monaco: 'material-palenight',
   colors: {
     bg: { primary: '#292d3e', secondary: '#232635', tertiary: '#3a3f58', elevated: '#292d3e' },
@@ -961,7 +961,7 @@ export const materialPalenight: Theme = {
 export const nightOwl: Theme = {
   id: 'night-owl',
   name: 'Night Owl',
-  category: 'Popular Dark',
+  category: 'Cool',
   monaco: 'night-owl',
   colors: {
     bg: { primary: '#011627', secondary: '#01111d', tertiary: '#0b2942', elevated: '#011627' },
@@ -1003,7 +1003,7 @@ export const nightOwl: Theme = {
 export const synthwave: Theme = {
   id: 'synthwave-84',
   name: "Synthwave '84",
-  category: 'Vibrant & Fun',
+  category: 'Vibrant',
   monaco: 'synthwave-84',
   colors: {
     bg: { primary: '#262335', secondary: '#1e1c2a', tertiary: '#463465', elevated: '#262335' },
@@ -1045,7 +1045,7 @@ export const synthwave: Theme = {
 export const rosePine: Theme = {
   id: 'rose-pine',
   name: 'Rosé Pine',
-  category: 'Pastel & Cozy',
+  category: 'Warm',
   monaco: 'rose-pine',
   colors: {
     bg: { primary: '#191724', secondary: '#1f1d2e', tertiary: '#403d52', elevated: '#191724' },
@@ -1087,7 +1087,7 @@ export const rosePine: Theme = {
 export const everforestDark: Theme = {
   id: 'everforest-dark',
   name: 'Everforest Dark',
-  category: 'Nature Inspired',
+  category: 'Cool',
   monaco: 'everforest-dark',
   colors: {
     bg: { primary: '#2b3339', secondary: '#232a2e', tertiary: '#3d484d', elevated: '#2b3339' },
@@ -1129,7 +1129,7 @@ export const everforestDark: Theme = {
 export const atomOneLight: Theme = {
   id: 'atom-one-light',
   name: 'Atom One Light',
-  category: 'Popular Light',
+  category: 'Light',
   monaco: 'atom-one-light',
   colors: {
     bg: { primary: '#fafafa', secondary: '#f0f0f0', tertiary: '#d7dae0', elevated: '#fafafa' },
@@ -1171,7 +1171,7 @@ export const atomOneLight: Theme = {
 export const shadesOfPurple: Theme = {
   id: 'shades-of-purple',
   name: 'Shades of Purple',
-  category: 'Vibrant & Fun',
+  category: 'Vibrant',
   monaco: 'shades-of-purple',
   colors: {
     bg: { primary: '#2d2b55', secondary: '#1e1e3f', tertiary: '#4d21fc', elevated: '#2d2b55' },
@@ -1213,7 +1213,7 @@ export const shadesOfPurple: Theme = {
 export const cobalt2: Theme = {
   id: 'cobalt2',
   name: 'Cobalt2',
-  category: 'Vibrant & Fun',
+  category: 'Vibrant',
   monaco: 'cobalt2',
   colors: {
     bg: { primary: '#193549', secondary: '#0d3a58', tertiary: '#1f4662', elevated: '#193549' },
@@ -1255,7 +1255,7 @@ export const cobalt2: Theme = {
 export const horizon: Theme = {
   id: 'horizon',
   name: 'Horizon',
-  category: 'Vibrant & Fun',
+  category: 'Warm',
   monaco: 'horizon',
   colors: {
     bg: { primary: '#1c1e26', secondary: '#16161c', tertiary: '#2e303e', elevated: '#1c1e26' },
@@ -1396,13 +1396,11 @@ export function getAvailableThemes(): Array<{
 
   // Define category order
   const categoryOrder = [
-    'Classic',
-    'Popular Dark',
-    'Popular Light',
-    'Pastel & Cozy',
-    'Vibrant & Fun',
-    'Nature Inspired',
-    'Retro',
+    'Dark',
+    'Light',
+    'Warm',
+    'Cool',
+    'Vibrant',
   ];
 
   return categoryOrder
