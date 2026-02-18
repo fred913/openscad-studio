@@ -1,42 +1,33 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import type { Message, ToolCallMessage } from '../hooks/useAiAgent';
 import { Button } from './ui';
+import { MarkdownMessage } from './MarkdownMessage';
 import { ModelSelector } from './ModelSelector';
 import { useHistory } from '../hooks/useHistory';
 
 // Helper to extract image path from a tool result
 function getImagePathFromResult(result: unknown): string | null {
-  console.log('[getImagePathFromResult] Input:', result, 'Type:', typeof result);
-
   if (!result) return null;
 
-  // If result is a string, try to parse it as JSON
   if (typeof result === 'string') {
     try {
       const parsed = JSON.parse(result);
-      console.log('[getImagePathFromResult] Parsed JSON:', parsed);
       if (parsed.image_path) {
-        console.log('[getImagePathFromResult] Found image_path:', parsed.image_path);
         return parsed.image_path;
       }
     } catch {
-      // Check if it's a direct path to an image
       if (result.endsWith('.png') || result.endsWith('.svg') || result.endsWith('.jpg')) {
-        console.log('[getImagePathFromResult] Direct path:', result);
         return result;
       }
     }
   }
 
-  // If result is an object with image_path
   if (typeof result === 'object' && result !== null && 'image_path' in result) {
-    const path = (result as { image_path: string }).image_path;
-    console.log('[getImagePathFromResult] Object image_path:', path);
-    return path;
+    return (result as { image_path: string }).image_path;
   }
 
-  console.log('[getImagePathFromResult] No image path found');
   return null;
 }
 
@@ -96,29 +87,9 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
       }
     }, [messages, streamingResponse]);
 
-    // Log when messages or streamingResponse changes
     useEffect(() => {
-      console.log('[AiPromptPanel] Messages updated. Count:', messages.length);
-      console.log(
-        '[AiPromptPanel] Messages:',
-        messages.map((m) => ({
-          type: m.type,
-          id: m.id,
-          content: 'content' in m ? (m.content as string).substring(0, 50) : 'N/A',
-        }))
-      );
+      if (import.meta.env.DEV) console.log('[AiPromptPanel] Messages updated. Count:', messages.length);
     }, [messages]);
-
-    useEffect(() => {
-      console.log(
-        '[AiPromptPanel] streamingResponse updated:',
-        streamingResponse ? streamingResponse.substring(0, 100) + '...' : null
-      );
-    }, [streamingResponse]);
-
-    useEffect(() => {
-      console.log('[AiPromptPanel] currentToolCalls updated:', currentToolCalls);
-    }, [currentToolCalls]);
 
     const handleSubmit = () => {
       if (!prompt.trim() || isStreaming) return;
@@ -172,7 +143,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
         }
       } catch (err) {
         console.error('[AiPromptPanel] Failed to restore checkpoint:', err);
-        alert(`Failed to restore checkpoint: ${err}`);
+        toast.error(`Failed to restore checkpoint: ${err}`);
       }
     };
 
@@ -290,7 +261,9 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                       <div className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
                         AI
                       </div>
-                      <div className="text-sm whitespace-pre-wrap font-mono">{message.content}</div>
+                      <div className="text-sm">
+                        <MarkdownMessage content={message.content} />
+                      </div>
                     </div>
                   </div>
                 );
@@ -304,9 +277,8 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                     ? getImagePathFromResult(toolMessage.result)
                     : null;
 
-                if (imagePath) {
+                if (imagePath && import.meta.env.DEV) {
                   console.log('[AiPromptPanel] Image path:', imagePath);
-                  console.log('[AiPromptPanel] Converted src:', convertFileSrc(imagePath));
                 }
 
                 return (
@@ -502,7 +474,9 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                   <div className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
                     AI
                   </div>
-                  <div className="text-sm whitespace-pre-wrap font-mono">{streamingResponse}</div>
+                  <div className="text-sm">
+                    <MarkdownMessage content={streamingResponse} />
+                  </div>
                 </div>
               </div>
             )}
@@ -564,7 +538,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Describe the changes you want to make..."
-            className="flex-1 rounded px-3 py-2 resize-none focus:outline-none focus:ring-2 text-sm"
+            className="flex-1 rounded border px-3 py-2 resize-none focus:outline-none focus:ring-2 text-sm"
             style={{
               backgroundColor: 'var(--bg-elevated)',
               color: 'var(--text-primary)',

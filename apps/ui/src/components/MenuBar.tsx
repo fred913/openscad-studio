@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
+import { toast } from 'sonner';
 import { renderExact, type ExportFormat } from '../api/tauri';
 
 interface MenuBarProps {
@@ -70,7 +71,7 @@ export function MenuBar({
       onFilePathChange(savePath);
     } catch (err) {
       console.error('Save failed:', err);
-      alert(`Failed to save file: ${err}`);
+      toast.error(`Failed to save file: ${err}`);
     }
   };
 
@@ -101,7 +102,7 @@ export function MenuBar({
       onFilePathChange(filePath);
     } catch (err) {
       console.error('Open failed:', err);
-      alert(`Failed to open file: ${err}`);
+      toast.error(`Failed to open file: ${err}`);
     }
   };
 
@@ -130,10 +131,10 @@ export function MenuBar({
         out_path: savePath,
       });
 
-      alert(`Exported successfully to ${savePath}`);
+      toast.success(`Exported successfully to ${savePath}`);
     } catch (err) {
       console.error('Export failed:', err);
-      alert(`Export failed: ${err}`);
+      toast.error(`Export failed: ${err}`);
     }
   };
 
