@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
-import { renderExact, type ExportFormat } from '../api/tauri';
+import { writeFile } from '@tauri-apps/plugin-fs';
+import type { ExportFormat } from '../api/tauri';
+import { RenderService, type ExportFormat as WasmExportFormat } from '../services/renderService';
 import { Button, Select, Label } from './ui';
 
 interface ExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   source: string;
-  openscadPath: string;
   workingDir?: string | null;
 }
 
@@ -16,7 +17,6 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'obj', label: 'OBJ (3D Model)', ext: 'obj' },
   { value: 'amf', label: 'AMF (3D Model)', ext: 'amf' },
   { value: '3mf', label: '3MF (3D Model)', ext: '3mf' },
-  { value: 'png', label: 'PNG (Image)', ext: 'png' },
   { value: 'svg', label: 'SVG (2D Vector)', ext: 'svg' },
   { value: 'dxf', label: 'DXF (2D CAD)', ext: 'dxf' },
 ];
@@ -25,8 +25,6 @@ export function ExportDialog({
   isOpen,
   onClose,
   source,
-  openscadPath,
-  workingDir,
 }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
@@ -58,13 +56,12 @@ export function ExportDialog({
         return;
       }
 
-      // Render to file
-      await renderExact(openscadPath, {
+      // Render via WASM and write to file
+      const exportBytes = await RenderService.getInstance().exportModel(
         source,
-        format,
-        out_path: savePath,
-        working_dir: workingDir || undefined,
-      });
+        format as WasmExportFormat,
+      );
+      await writeFile(savePath, exportBytes);
 
       // Success - close dialog
       onClose();

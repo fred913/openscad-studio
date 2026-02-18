@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
-import { renderExact, type ExportFormat } from '../api/tauri';
+import { type ExportFormat } from '../api/tauri';
+import { RenderService } from '../services/renderService';
+import { writeFile } from '@tauri-apps/plugin-fs';
 
 interface MenuBarProps {
   source: string;
   onSourceChange: (source: string) => void;
   currentFilePath: string | null;
   onFilePathChange: (path: string | null) => void;
-  openscadPath: string;
 }
 
 const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
@@ -16,7 +17,6 @@ const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'obj', label: 'OBJ (3D Model)', ext: 'obj' },
   { value: 'amf', label: 'AMF (3D Model)', ext: 'amf' },
   { value: '3mf', label: '3MF (3D Model)', ext: '3mf' },
-  { value: 'png', label: 'PNG (Image)', ext: 'png' },
   { value: 'svg', label: 'SVG (2D Vector)', ext: 'svg' },
   { value: 'dxf', label: 'DXF (2D CAD)', ext: 'dxf' },
 ];
@@ -26,7 +26,6 @@ export function MenuBar({
   onSourceChange,
   currentFilePath,
   onFilePathChange,
-  openscadPath,
 }: MenuBarProps) {
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -125,11 +124,11 @@ export function MenuBar({
 
       if (!savePath) return; // User cancelled
 
-      await renderExact(openscadPath, {
+      const exportBytes = await RenderService.getInstance().exportModel(
         source,
-        format,
-        out_path: savePath,
-      });
+        format as 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf',
+      );
+      await writeFile(savePath, exportBytes);
 
       toast.success(`Exported successfully to ${savePath}`);
     } catch (err) {

@@ -6,7 +6,6 @@ import { ExportDialog } from './components/ExportDialog';
 import type { AiPromptPanelRef } from './components/AiPromptPanel';
 import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
 import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen';
-import { OpenScadSetupScreen } from './components/OpenScadSetupScreen';
 import { TabBar, type Tab } from './components/TabBar';
 import { Button } from './components/ui';
 import { panelComponents, tabComponents, WorkspaceTab } from './components/panels/PanelComponents';
@@ -25,7 +24,8 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
-import { renderExact, type ExportFormat, updateEditorState, updateWorkingDir } from './api/tauri';
+import { type ExportFormat, updateEditorState, updateWorkingDir } from './api/tauri';
+import { RenderService } from './services/renderService';
 import { useSettings, loadSettings } from './stores/settingsStore';
 import { formatOpenScadCode } from './utils/formatter';
 import { TbSettings, TbBox, TbRuler2 } from 'react-icons/tb';
@@ -54,8 +54,6 @@ function App() {
   const [tabs, setTabs] = useState<Tab[]>([initialTab]);
   const [activeTabId, setActiveTabId] = useState<string>(initialTab.id);
   const [showWelcome, setShowWelcome] = useState(true);
-  const [showSetupScreen, setShowSetupScreen] = useState(false);
-  const [setupScreenDismissed, setSetupScreenDismissed] = useState(false);
 
   // Computed active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -79,7 +77,7 @@ function App() {
     diagnostics,
     isRendering,
     error,
-    openscadPath,
+    ready,
     dimensionMode,
     manualRender,
     renderOnSave,
@@ -252,28 +250,12 @@ function App() {
 
   // Note: Tree-sitter formatter is initialized in main.tsx for optimal performance
 
-  // Check for OpenSCAD on mount
-  useEffect(() => {
-    // If OpenSCAD is not detected and setup screen hasn't been dismissed
-    if (!openscadPath && !setupScreenDismissed) {
-      // Give it a moment to detect OpenSCAD
-      const timer = setTimeout(() => {
-        if (!openscadPath && !setupScreenDismissed) {
-          setShowSetupScreen(true);
-        }
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (openscadPath) {
-      // OpenSCAD found, hide setup screen if it was showing
-      setShowSetupScreen(false);
-    }
-  }, [openscadPath, setupScreenDismissed]);
+
 
   // Use refs to avoid stale closures in event listeners
   const activeTabRef = useRef<Tab>(activeTab);
   const tabsRef = useRef<Tab[]>(tabs);
   const sourceRef = useRef<string>(source);
-  const openscadPathRef = useRef<string>(openscadPath);
   const workingDirRef = useRef<string | null>(workingDir);
   const renderOnSaveRef = useRef(renderOnSave);
   const manualRenderRef = useRef(manualRender);
@@ -291,9 +273,6 @@ function App() {
     sourceRef.current = source;
   }, [source]);
 
-  useEffect(() => {
-    openscadPathRef.current = openscadPath;
-  }, [openscadPath]);
 
   useEffect(() => {
     workingDirRef.current = workingDir;
@@ -430,7 +409,7 @@ function App() {
         addToRecentFiles(savePath);
 
         // Trigger render on save (only if OpenSCAD is available)
-        if (openscadPathRef.current && renderOnSaveRef.current) {
+        if (renderOnSaveRef.current) {
           renderOnSaveRef.current();
         }
 
@@ -512,7 +491,7 @@ function App() {
         addToRecentFiles(path);
 
         // Automatically render the opened file
-        if (openscadPathRef.current && manualRenderRef.current) {
+        if (manualRenderRef.current) {
           setTimeout(() => {
             if (manualRenderRef.current) {
               manualRenderRef.current();
@@ -584,7 +563,7 @@ function App() {
       addToRecentFiles(filePath);
 
       // Automatically render the opened file
-      if (openscadPathRef.current && manualRenderRef.current) {
+      if (manualRenderRef.current) {
         setTimeout(() => {
           if (manualRenderRef.current) {
             manualRenderRef.current();
@@ -684,7 +663,7 @@ function App() {
           addToRecentFiles(filePath);
 
           // Automatically render the opened file
-          if (openscadPathRef.current && manualRenderRef.current) {
+          if (manualRenderRef.current) {
             setTimeout(() => {
               if (manualRenderRef.current) {
                 manualRenderRef.current();
@@ -737,12 +716,13 @@ function App() {
 
           if (!isMounted) return;
 
-          await renderExact(openscadPathRef.current, {
-            source: sourceRef.current,
-            format,
-            out_path: savePath,
-            working_dir: workingDirRef.current || undefined,
-          });
+          const exportBytes = await RenderService.getInstance().exportModel(
+            sourceRef.current,
+            format as 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf',
+          );
+          // Write bytes to disk via Tauri
+          const { writeFile } = await import('@tauri-apps/plugin-fs');
+          await writeFile(savePath, exportBytes);
 
           if (isMounted) {
             toast.success(`Exported successfully to ${savePath}`);
@@ -998,23 +978,7 @@ function App() {
     ]
   );
 
-  // Show setup screen if OpenSCAD not found
-  if (showSetupScreen) {
-    return (
-      <div className="h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <OpenScadSetupScreen
-          onRetry={() => {
-            // Force re-check by reloading the page
-            window.location.reload();
-          }}
-          onSkip={() => {
-            setSetupScreenDismissed(true);
-            setShowSetupScreen(false);
-          }}
-        />
-      </div>
-    );
-  }
+
 
   // Show welcome screen if no file is open and welcome hasn't been dismissed
   if (showWelcome) {
@@ -1111,7 +1075,7 @@ function App() {
           <Button
             variant="primary"
             onClick={manualRender}
-            disabled={isRendering || !openscadPath}
+            disabled={isRendering || !ready}
             className="text-xs px-2 py-1"
           >
             Render (⌘↵)
@@ -1119,7 +1083,7 @@ function App() {
           <Button
             variant="secondary"
             onClick={() => setShowExportDialog(true)}
-            disabled={isRendering || !openscadPath}
+            disabled={isRendering || !ready}
             className="text-xs px-2 py-1"
           >
             Export
@@ -1163,7 +1127,6 @@ function App() {
         isOpen={showExportDialog}
         onClose={() => setShowExportDialog(false)}
         source={source}
-        openscadPath={openscadPath}
         workingDir={workingDir}
       />
 

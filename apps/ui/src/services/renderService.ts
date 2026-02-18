@@ -1,0 +1,391 @@
+import type {
+  WorkerRequest,
+  WorkerResponse,
+  WorkerRenderResult,
+  WorkerErrorResult,
+} from './openscad-worker';
+
+// ============================================================================
+// Public types
+// ============================================================================
+
+export interface Diagnostic {
+  severity: 'error' | 'warning' | 'info';
+  line?: number;
+  col?: number;
+  message: string;
+}
+
+export type ExportFormat = 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf';
+
+export interface RenderOptions {
+  view?: '2d' | '3d';
+  backend?: 'manifold' | 'cgal' | 'auto';
+}
+
+export interface RenderResult {
+  output: Uint8Array;
+  kind: 'mesh' | 'svg';
+  diagnostics: Diagnostic[];
+}
+
+export interface SyntaxCheckResult {
+  diagnostics: Diagnostic[];
+}
+
+// ============================================================================
+// Diagnostic parser (port of Rust parser)
+// ============================================================================
+
+const ERROR_REGEX = /^(ERROR|WARNING|ECHO):\s*(.*)/i;
+const LINE_NUMBER_REGEX = /line\s+(\d+)/i;
+
+export function parseOpenScadStderr(stderr: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+
+  for (const rawLine of stderr.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const match = ERROR_REGEX.exec(line);
+    if (!match) continue;
+
+    const severityStr = match[1].toLowerCase();
+    let severity: Diagnostic['severity'];
+    switch (severityStr) {
+      case 'error':
+        severity = 'error';
+        break;
+      case 'warning':
+        severity = 'warning';
+        break;
+      case 'echo':
+        severity = 'info';
+        break;
+      default:
+        continue;
+    }
+
+    const message = match[2] || '';
+    const lineMatch = LINE_NUMBER_REGEX.exec(message);
+    const lineNumber = lineMatch ? parseInt(lineMatch[1], 10) : undefined;
+
+    diagnostics.push({
+      severity,
+      line: lineNumber,
+      col: undefined,
+      message: line,
+    });
+  }
+
+  return diagnostics;
+}
+
+// ============================================================================
+// Cache
+// ============================================================================
+
+interface CacheEntry {
+  output: Uint8Array;
+  kind: 'mesh' | 'svg';
+  diagnostics: Diagnostic[];
+  timestamp: number;
+}
+
+const MAX_CACHE_ENTRIES = 50;
+
+class RenderCache {
+  private entries = new Map<string, CacheEntry>();
+
+  async generateKey(code: string, backend: string, view: string): Promise<string> {
+    const data = new TextEncoder().encode(code + backend + view);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = new Uint8Array(hashBuffer);
+    return Array.from(hashArray)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  get(key: string): CacheEntry | undefined {
+    return this.entries.get(key);
+  }
+
+  set(key: string, entry: CacheEntry): void {
+    // LRU eviction: remove oldest if at capacity
+    if (this.entries.size >= MAX_CACHE_ENTRIES) {
+      let oldestKey: string | undefined;
+      let oldestTime = Infinity;
+      for (const [k, v] of this.entries) {
+        if (v.timestamp < oldestTime) {
+          oldestTime = v.timestamp;
+          oldestKey = k;
+        }
+      }
+      if (oldestKey) {
+        this.entries.delete(oldestKey);
+      }
+    }
+    this.entries.set(key, entry);
+  }
+
+  clear(): void {
+    this.entries.clear();
+  }
+}
+
+// ============================================================================
+// RenderService
+// ============================================================================
+
+type PendingRequest = {
+  resolve: (result: WorkerRenderResult) => void;
+  reject: (error: Error) => void;
+};
+
+let globalInstance: RenderService | null = null;
+
+export class RenderService {
+  private worker: Worker | null = null;
+  private pending = new Map<string, PendingRequest>();
+  private cache = new RenderCache();
+  private idCounter = 0;
+  private initPromise: Promise<void> | null = null;
+  private disposed = false;
+
+  static getInstance(): RenderService {
+    if (!globalInstance) {
+      globalInstance = new RenderService();
+    }
+    return globalInstance;
+  }
+
+  private createWorker(): Worker {
+    return new Worker(new URL('./openscad-worker.ts', import.meta.url), {
+      type: 'module',
+    });
+  }
+
+  private setupWorker(worker: Worker): void {
+    worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
+      const response = event.data;
+
+      if (response.type === 'ready') {
+        // Handled by init()
+        return;
+      }
+
+      if (response.type === 'result' || response.type === 'error') {
+        const pending = this.pending.get(response.id);
+        if (!pending) return;
+
+        this.pending.delete(response.id);
+
+        if (response.type === 'error') {
+          pending.reject(new Error(response.error));
+        } else {
+          pending.resolve(response);
+        }
+      }
+    });
+
+    worker.addEventListener('error', (event) => {
+      console.error('[RenderService] Worker error:', event);
+      // Reject all pending requests
+      for (const [id, pending] of this.pending) {
+        pending.reject(new Error(`Worker error: ${event.message}`));
+        this.pending.delete(id);
+      }
+    });
+  }
+
+  /**
+   * Initialize the WASM instance in the worker.
+   * Call this early (e.g., on app startup) to warm up the instance.
+   */
+  async init(): Promise<void> {
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = new Promise<void>((resolve, reject) => {
+      this.worker = this.createWorker();
+      this.setupWorker(this.worker);
+
+      const onMessage = (event: MessageEvent<WorkerResponse>) => {
+        if (event.data.type === 'ready') {
+          this.worker?.removeEventListener('message', onMessage);
+          resolve();
+        } else if (event.data.type === 'error' && (event.data as WorkerErrorResult).id === '__init__') {
+          this.worker?.removeEventListener('message', onMessage);
+          reject(new Error((event.data as WorkerErrorResult).error));
+        }
+      };
+
+      this.worker.addEventListener('message', onMessage);
+
+      const initRequest: WorkerRequest = { type: 'init' };
+      this.worker.postMessage(initRequest);
+    });
+
+    return this.initPromise;
+  }
+
+  private nextId(): string {
+    return `req_${++this.idCounter}_${Date.now()}`;
+  }
+
+  private async sendRequest(code: string, args: string[]): Promise<WorkerRenderResult> {
+    await this.init();
+
+    if (!this.worker || this.disposed) {
+      throw new Error('RenderService has been disposed');
+    }
+
+    const id = this.nextId();
+
+    return new Promise<WorkerRenderResult>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+
+      const request: WorkerRequest = {
+        type: 'render',
+        id,
+        code,
+        args,
+      };
+
+      this.worker!.postMessage(request);
+    });
+  }
+
+  private buildArgs(outputPath: string, options: RenderOptions = {}): string[] {
+    const { backend = 'manifold' } = options;
+
+    const args = ['/input.scad', '-o', outputPath];
+
+    switch (backend) {
+      case 'manifold':
+        args.push('--backend=manifold');
+        break;
+      case 'cgal':
+        args.push('--backend=cgal');
+        break;
+      case 'auto':
+        // Let OpenSCAD choose
+        break;
+    }
+
+    return args;
+  }
+
+  /**
+   * Render OpenSCAD code and return the output bytes + diagnostics.
+   * 3D mode returns STL (kind: 'mesh'), 2D mode returns SVG (kind: 'svg').
+   */
+  async render(code: string, options: RenderOptions = {}): Promise<RenderResult> {
+    const { view = '3d', backend = 'manifold' } = options;
+
+    // Check cache
+    const cacheKey = await this.cache.generateKey(code, backend, view);
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return {
+        output: cached.output,
+        kind: cached.kind,
+        diagnostics: cached.diagnostics,
+      };
+    }
+
+    // Determine output format
+    const is3d = view === '3d';
+    const outputPath = is3d ? '/output.stl' : '/output.svg';
+    const kind: 'mesh' | 'svg' = is3d ? 'mesh' : 'svg';
+
+    const args = this.buildArgs(outputPath, { view, backend });
+    const result = await this.sendRequest(code, args);
+
+    const diagnostics = parseOpenScadStderr(result.stderr);
+
+    // Cache the result
+    this.cache.set(cacheKey, {
+      output: result.output,
+      kind,
+      diagnostics,
+      timestamp: Date.now(),
+    });
+
+    return {
+      output: result.output,
+      kind,
+      diagnostics,
+    };
+  }
+
+  /**
+   * Check syntax by attempting to render. Returns diagnostics only.
+   */
+  async checkSyntax(code: string): Promise<SyntaxCheckResult> {
+    const args = this.buildArgs('/output.stl', { backend: 'manifold' });
+    const result = await this.sendRequest(code, args);
+    const diagnostics = parseOpenScadStderr(result.stderr);
+
+    return { diagnostics };
+  }
+
+  /**
+   * Export a model in a specific format.
+   */
+  async exportModel(code: string, format: ExportFormat, options: { backend?: 'manifold' | 'cgal' | 'auto' } = {}): Promise<Uint8Array> {
+    const { backend = 'manifold' } = options;
+    const outputPath = `/output.${format}`;
+    const args = this.buildArgs(outputPath, { backend });
+
+    // For binary STL (more compact)
+    if (format === 'stl') {
+      args.push('--export-format=binstl');
+    }
+
+    const result = await this.sendRequest(code, args);
+
+    if (result.output.length === 0) {
+      const diagnostics = parseOpenScadStderr(result.stderr);
+      const errors = diagnostics.filter((d) => d.severity === 'error');
+      if (errors.length > 0) {
+        throw new Error(`Export failed:\n${errors.map((e) => e.message).join('\n')}`);
+      }
+      throw new Error('Export produced no output');
+    }
+
+    return result.output;
+  }
+
+  /**
+   * Cancel all pending renders by terminating the worker.
+   * A new worker will be created on the next render call.
+   */
+  cancel(): void {
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
+    }
+    // Reject all pending requests
+    for (const [, pending] of this.pending) {
+      pending.reject(new Error('Render cancelled'));
+    }
+    this.pending.clear();
+    this.initPromise = null;
+  }
+
+  /**
+   * Clear the render cache.
+   */
+  clearCache(): void {
+    this.cache.clear();
+  }
+
+  /**
+   * Permanently dispose the service.
+   */
+  dispose(): void {
+    this.disposed = true;
+    this.cancel();
+    globalInstance = null;
+  }
+}
