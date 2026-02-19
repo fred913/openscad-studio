@@ -40,7 +40,7 @@ declare global {
 const capabilities: PlatformCapabilities = {
   multiFile: false,
   hasNativeMenu: false,
-  hasFileSystem: true,
+  hasFileSystem: false,
   canSetWindowTitle: true,
 };
 
@@ -113,20 +113,30 @@ export class WebBridge implements PlatformBridge {
   async fileSave(
     content: string,
     _path?: string | null,
-    filters?: FileFilter[]
+    filters?: FileFilter[],
+    defaultFilename?: string
   ): Promise<string | null> {
-    return this.fileSaveAs(content, filters);
+    return this.fileSaveAs(content, filters, defaultFilename);
   }
 
-  async fileSaveAs(content: string, filters?: FileFilter[]): Promise<string | null> {
+  async fileSaveAs(
+    content: string,
+    filters?: FileFilter[],
+    defaultFilename?: string
+  ): Promise<string | null> {
+    const filename = this.ensureExtension(defaultFilename || 'untitled', '.scad');
     if (hasFileSystemAccess()) {
-      return this.fileSaveNative(content, filters);
+      return this.fileSaveNative(content, filters, filename);
     }
-    this.downloadFile(content, 'untitled.scad', 'text/plain');
-    return 'untitled.scad';
+    this.downloadFile(content, filename, 'text/plain');
+    return filename;
   }
 
-  private async fileSaveNative(content: string, filters?: FileFilter[]): Promise<string | null> {
+  private async fileSaveNative(
+    content: string,
+    filters?: FileFilter[],
+    suggestedName?: string
+  ): Promise<string | null> {
     try {
       const types: PickerAcceptType[] = filters?.length
         ? filters.map((f) => ({
@@ -137,7 +147,7 @@ export class WebBridge implements PlatformBridge {
 
       const handle = await window.showSaveFilePicker({
         types: types.length ? types : undefined,
-        suggestedName: 'untitled.scad',
+        suggestedName: suggestedName || 'untitled.scad',
       });
 
       const writable = await handle.createWritable();
@@ -198,8 +208,8 @@ export class WebBridge implements PlatformBridge {
     return window.confirm(message);
   }
 
-  setWindowTitle(title: string): void {
-    document.title = title;
+  setWindowTitle(_title: string): void {
+    document.title = 'OpenSCAD Studio';
   }
 
   onCloseRequested(handler: () => Promise<boolean>): () => void {
@@ -214,6 +224,10 @@ export class WebBridge implements PlatformBridge {
       window.removeEventListener('beforeunload', beforeUnload);
       delete window.__closeHandler;
     };
+  }
+
+  private ensureExtension(name: string, ext: string): string {
+    return name.endsWith(ext) ? name : `${name}${ext}`;
   }
 
   private downloadFile(content: string, filename: string, mimeType: string): void {
