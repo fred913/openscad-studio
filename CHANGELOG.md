@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.0] - 2026-02-19
 
+## 🌐 Now Available on the Web
+
+OpenSCAD Studio now runs entirely in your browser — no install needed. Visit **[openscad-studio.pages.dev](https://openscad-studio.pages.dev)** to start designing immediately.
+
+Rendering is powered by [openscad-wasm](https://github.com/nicolo-ribaudo/openscad-wasm), so everything runs client-side. Works in Chrome and Edge.
+
+## ✨ What's New
+
+- **AI copilot on web** — same streaming AI assistant, now works in the browser with your own API key
+- **Dynamic model fetching** — latest Anthropic and OpenAI models appear automatically
+- **Markdown rendering** in AI chat messages
+- **Toast notifications** replace browser alert dialogs
+- **Editable file names** in the tab bar
+- **First-run layout picker** for new users
+- **Download for Mac** link in the web app header with auto-detected architecture
+- **Console panel** now separates ECHO output from diagnostics
+
+## ⚖️ License Change
+
+License changed from MIT to **GPL-2.0** to comply with the openscad-wasm dependency.
+
+## Installation
+
+### Web
+
+Visit **[openscad-studio.pages.dev](https://openscad-studio.pages.dev)**
+
+### macOS
+
+Download the DMG for your architecture from the assets below.
+
+## [0.7.0] - 2026-02-19
+
 ### Added
 
 - **Web app**: OpenSCAD Studio now runs in the browser at [openscad-studio.pages.dev](https://openscad-studio.pages.dev)
