@@ -11,6 +11,8 @@ export interface AiToolCallbacks {
   getCurrentCode: () => string;
   captureCurrentView: () => Promise<string | null>;
   getStlBlobUrl: () => string | null;
+  getWorkingDir: () => string | null;
+  getAuxiliaryFiles: () => Record<string, string>;
 }
 
 export const SYSTEM_PROMPT = `## OpenSCAD AI Assistant
@@ -19,6 +21,8 @@ You are an expert OpenSCAD assistant helping users design and modify 3D models. 
 
 ### Your Capabilities:
 - **View code**: Use \`get_current_code\` to see what you're working with
+- **Browse project files**: Use \`list_project_files\` to see all .scad files in the working directory
+- **Read any file**: Use \`read_file\` to read any .scad file in the project (for understanding includes/uses)
 - **See the design**: Use \`get_preview_screenshot\` to see the rendered output
 - **Check for errors**: Use \`get_diagnostics\` to check compilation errors and warnings
 - **Make changes**: Use \`apply_edit\` to modify the code with exact string replacement
@@ -97,6 +101,42 @@ export function buildTools(callbacks: AiToolCallbacks) {
       inputSchema: z.object({}),
       execute: async () => {
         return callbacks.getCurrentCode();
+      },
+    }),
+
+    list_project_files: tool({
+      description:
+        'List all .scad files in the current working directory. Returns relative file paths. Use this to discover project structure and find files referenced by include/use statements.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const files = callbacks.getAuxiliaryFiles();
+        const paths = Object.keys(files);
+        if (paths.length === 0) {
+          return 'No project files found. The current file may not have been saved to disk, or the working directory has no other .scad files.';
+        }
+        return `Project files (${paths.length}):\n${paths.map((p) => `  ${p}`).join('\n')}`;
+      },
+    }),
+
+    read_file: tool({
+      description:
+        'Read the contents of a .scad file from the working directory. Use the relative path as shown by list_project_files.',
+      inputSchema: z.object({
+        path: z
+          .string()
+          .describe('Relative path to the file (e.g. "parts.scad" or "lib/utils.scad")'),
+      }),
+      execute: async ({ path }) => {
+        const files = callbacks.getAuxiliaryFiles();
+        const content = files[path];
+        if (content === undefined) {
+          const available = Object.keys(files);
+          if (available.length === 0) {
+            return `❌ File not found: ${path}\n\nNo project files are available. The current file may not have been saved to disk.`;
+          }
+          return `❌ File not found: ${path}\n\nAvailable files:\n${available.map((p) => `  ${p}`).join('\n')}`;
+        }
+        return content;
       },
     }),
 

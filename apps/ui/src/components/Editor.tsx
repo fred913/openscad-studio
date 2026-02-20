@@ -144,7 +144,7 @@ export function Editor({
     }));
 
     monaco.editor.setModelMarkers(model, 'openscad', markers);
-  }, [diagnostics]);
+  }, [diagnostics, editorMounted]);
 
   const handleEditorDidMount = (
     editor: Monaco.editor.IStandaloneCodeEditor,

@@ -98,8 +98,13 @@ const MAX_CACHE_ENTRIES = 50;
 class RenderCache {
   private entries = new Map<string, CacheEntry>();
 
-  async generateKey(code: string, backend: string, view: string): Promise<string> {
-    const data = new TextEncoder().encode(code + backend + view);
+  async generateKey(
+    code: string,
+    backend: string,
+    view: string,
+    auxFileCount: number = 0
+  ): Promise<string> {
+    const data = new TextEncoder().encode(code + backend + view + auxFileCount);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = new Uint8Array(hashBuffer);
     return Array.from(hashArray)
@@ -292,7 +297,8 @@ export class RenderService {
     const { view = '3d', backend = 'manifold', auxiliaryFiles } = options;
 
     // Check cache
-    const cacheKey = await this.cache.generateKey(code, backend, view);
+    const auxFileCount = auxiliaryFiles ? Object.keys(auxiliaryFiles).length : 0;
+    const cacheKey = await this.cache.generateKey(code, backend, view, auxFileCount);
     const cached = this.cache.get(cacheKey);
     if (cached) {
       return {

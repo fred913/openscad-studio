@@ -193,6 +193,8 @@ export function useAiAgent() {
   const sourceRef = useRef<string>('');
   const capturePreviewRef = useRef<(() => Promise<string | null>) | null>(null);
   const stlBlobUrlRef = useRef<string | null>(null);
+  const workingDirRef = useRef<string | null>(null);
+  const auxiliaryFilesRef = useRef<Record<string, string>>({});
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamBufferRef = useRef<string>('');
   const currentToolCallsRef = useRef<ToolCall[]>([]);
@@ -209,6 +211,8 @@ export function useAiAgent() {
         return null;
       },
       getStlBlobUrl: () => stlBlobUrlRef.current,
+      getWorkingDir: () => workingDirRef.current,
+      getAuxiliaryFiles: () => auxiliaryFilesRef.current,
     }),
     []
   );
@@ -225,6 +229,14 @@ export function useAiAgent() {
 
   const updateStlBlobUrl = useCallback((url: string | null) => {
     stlBlobUrlRef.current = url;
+  }, []);
+
+  const updateWorkingDir = useCallback((dir: string | null) => {
+    workingDirRef.current = dir;
+  }, []);
+
+  const updateAuxiliaryFiles = useCallback((files: Record<string, string>) => {
+    auxiliaryFilesRef.current = files;
   }, []);
 
   const loadModelAndProviders = useCallback(() => {
@@ -521,5 +533,7 @@ export function useAiAgent() {
     updateSourceRef,
     updateCapturePreview,
     updateStlBlobUrl,
+    updateWorkingDir,
+    updateAuxiliaryFiles,
   };
 }

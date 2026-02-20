@@ -193,6 +193,7 @@ function App() {
     dimensionMode,
     manualRender,
     renderOnSave,
+    auxiliaryFiles,
   } = useOpenScad({
     workingDir,
     autoRenderOnIdle: settings.editor.autoRenderOnIdle,
@@ -233,6 +234,8 @@ function App() {
     updateSourceRef,
     updateCapturePreview,
     updateStlBlobUrl,
+    updateWorkingDir,
+    updateAuxiliaryFiles,
     loadModelAndProviders,
   } = useAiAgent();
 
@@ -442,7 +445,12 @@ function App() {
 
   useEffect(() => {
     workingDirRef.current = workingDir;
-  }, [workingDir]);
+    updateWorkingDir(workingDir);
+  }, [workingDir, updateWorkingDir]);
+
+  useEffect(() => {
+    updateAuxiliaryFiles(auxiliaryFiles);
+  }, [auxiliaryFiles, updateAuxiliaryFiles]);
 
   useEffect(() => {
     renderOnSaveRef.current = renderOnSave;

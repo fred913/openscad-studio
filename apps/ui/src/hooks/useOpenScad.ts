@@ -27,18 +27,22 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
   const prevBlobUrlRef = useRef<string>('');
 
   const renderServiceRef = useRef<RenderService>(RenderService.getInstance());
+  const [auxiliaryFiles, setAuxiliaryFiles] = useState<Record<string, string>>({});
   const auxiliaryFilesRef = useRef<Record<string, string>>({});
+  const auxFilesPromiseRef = useRef<Promise<void>>(Promise.resolve());
 
-  // Load auxiliary files from working directory for include/use resolution
   useEffect(() => {
     if (!options.workingDir) {
       auxiliaryFilesRef.current = {};
+      setAuxiliaryFiles({});
+      auxFilesPromiseRef.current = Promise.resolve();
       return;
     }
 
     const platform = getPlatform();
-    platform.readDirectoryFiles(options.workingDir).then((files) => {
+    auxFilesPromiseRef.current = platform.readDirectoryFiles(options.workingDir).then((files) => {
       auxiliaryFilesRef.current = files;
+      setAuxiliaryFiles(files);
     });
   }, [options.workingDir]);
 
@@ -70,6 +74,9 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
     setError('');
 
     try {
+      // Wait for auxiliary files to finish loading before rendering
+      await auxFilesPromiseRef.current;
+
       const result = await renderServiceRef.current.render(code, {
         view: dimension,
         backend: 'manifold',
@@ -228,5 +235,6 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
     manualRender,
     renderOnSave,
     clearPreview,
+    auxiliaryFiles,
   };
 }
