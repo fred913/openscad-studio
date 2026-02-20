@@ -195,6 +195,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
     <div
       className="fixed inset-0 flex items-center justify-center z-50"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={handleClose}
     >
       <div
         className="rounded-xl shadow-2xl w-full max-w-3xl mx-4 flex h-[600px] overflow-hidden"
@@ -202,6 +203,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
           backgroundColor: 'var(--bg-secondary)',
           border: '1px solid var(--border-primary)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Left Sidebar */}
         <div

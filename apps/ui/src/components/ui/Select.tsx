@@ -33,7 +33,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     const styles = {
       backgroundColor: disabled ? 'var(--bg-tertiary)' : 'var(--bg-elevated)',
       color: disabled ? 'var(--text-tertiary)' : 'var(--text-primary)',
-      border: '1px solid var(--border-primary)',
+      border: '1px solid var(--border-secondary)',
       cursor: disabled ? 'not-allowed' : 'pointer',
       backgroundImage: `url("${dropdownArrow}")`,
       backgroundSize: size === 'sm' ? '12px 12px' : '14px 14px',
