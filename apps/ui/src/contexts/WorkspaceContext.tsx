@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
-import type { Diagnostic, RenderKind } from '../api/tauri';
+import type { Diagnostic } from '../platform/historyService';
+import type { RenderKind } from '../hooks/useOpenScad';
 import type { Message, ToolCall } from '../hooks/useAiAgent';
 import type { AiMode, AiPromptPanelRef } from '../components/AiPromptPanel';
 import type { Settings } from '../stores/settingsStore';
@@ -49,6 +50,7 @@ export interface WorkspaceState {
 
   onAcceptDiff: () => void;
   onRejectDiff: () => void;
+  onOpenAiSettings: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceState | null>(null);

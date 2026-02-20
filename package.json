@@ -1,6 +1,6 @@
 {
   "name": "openscad-studio",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Modern OpenSCAD editor with live preview and AI copilot",
   "packageManager": "pnpm@10.12.4",
@@ -10,10 +10,20 @@
     "tauri:dev": "cd apps/ui && pnpm tauri dev",
     "tauri:build": "cd apps/ui && pnpm tauri build",
     "lint": "pnpm -r lint",
-    "type-check": "pnpm -r type-check"
+    "type-check": "pnpm -r type-check",
+    "format": "pnpm format:ts && pnpm format:rust",
+    "format:ts": "prettier --write \"apps/**/*.{ts,tsx,js,jsx,json,css}\" \"packages/**/*.{ts,tsx,js,jsx,json}\"",
+    "web:dev": "cd apps/web && pnpm dev",
+    "web:build": "cd apps/web && pnpm build",
+    "web:preview": "cd apps/web && pnpm preview",
+    "format:rust": "cd apps/ui/src-tauri && cargo fmt",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,js,jsx,json,css}\" \"packages/**/*.{ts,tsx,js,jsx,json}\" && cd apps/ui/src-tauri && cargo fmt --check"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "prettier": "^3.7.4"
+  }
 }

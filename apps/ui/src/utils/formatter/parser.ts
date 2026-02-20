@@ -53,7 +53,7 @@ export async function initParser(): Promise<void> {
       parser = new TreeSitter.Parser();
       parser.setLanguage(language);
 
-      console.log('[OpenSCAD Formatter] Parser initialized successfully');
+      if (import.meta.env.DEV) console.log('[OpenSCAD Formatter] Parser initialized successfully');
     } catch (error) {
       console.error('[OpenSCAD Formatter] Failed to initialize parser:', error);
       throw error;

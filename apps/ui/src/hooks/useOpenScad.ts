@@ -1,174 +1,212 @@
-import { useState, useEffect, useCallback } from 'react';
-import { renderPreview, locateOpenScad, updateEditorState, updateOpenscadPath, getDiagnostics, type Diagnostic, type RenderPreviewResponse, type RenderKind } from '../api/tauri';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { RenderService, type Diagnostic } from '../services/renderService';
 
-export function useOpenScad(workingDir?: string | null) {
-  const [source, setSource] = useState<string>('// Type your OpenSCAD code here\ncube([10, 10, 10]);');
-  const [openscadPath, setOpenscadPath] = useState<string>('');
+export type RenderKind = 'mesh' | 'svg';
+
+interface UseOpenScadOptions {
+  workingDir?: string | null;
+  autoRenderOnIdle?: boolean;
+  autoRenderDelayMs?: number;
+}
+
+export function useOpenScad(options: UseOpenScadOptions = {}) {
+  const { autoRenderOnIdle = false, autoRenderDelayMs = 500 } = options;
+  const [source, setSource] = useState<string>(
+    '// Type your OpenSCAD code here\ncube([10, 10, 10]);'
+  );
+  const [ready, setReady] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string>('');
   const [previewKind, setPreviewKind] = useState<RenderKind>('mesh');
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [isRendering, setIsRendering] = useState(false);
   const [error, setError] = useState<string>('');
-  const [dimensionMode, setDimensionMode] = useState<'2d' | '3d'>('3d');
+  const [dimensionMode] = useState<'2d' | '3d'>('3d');
 
-  // Locate OpenSCAD on mount
+  // Track Blob URLs for cleanup
+  const prevBlobUrlRef = useRef<string>('');
+
+  const renderServiceRef = useRef<RenderService>(RenderService.getInstance());
+
+  // Initialize WASM on mount
   useEffect(() => {
-    locateOpenScad({})
-      .then(response => {
-        setOpenscadPath(response.exe_path);
-        console.log('Found OpenSCAD at:', response.exe_path);
-        // Sync with backend state for AI agent
-        updateOpenscadPath(response.exe_path).catch(err => {
-          console.error('Failed to update openscad path in backend:', err);
-        });
+    const service = renderServiceRef.current;
+    service
+      .init()
+      .then(() => {
+        setReady(true);
+        if (import.meta.env.DEV) console.log('[useOpenScad] OpenSCAD WASM initialized');
       })
-      .catch(err => {
-        setError(`Failed to locate OpenSCAD: ${err}`);
-        console.error('OpenSCAD location error:', err);
+      .catch((err) => {
+        setError(`Failed to initialize OpenSCAD WASM: ${err}`);
+        console.error('[useOpenScad] WASM init error:', err);
       });
   }, []);
 
-  const doRender = useCallback(async (code: string, useMesh = true, dimension: '2d' | '3d' = '3d') => {
-    console.log('[doRender] Starting render:', { dimension, useMesh, codeLength: code.length });
+  const doRender = useCallback(async (code: string, dimension: '2d' | '3d' = '3d') => {
+    if (import.meta.env.DEV)
+      console.log('[doRender] Starting render:', { dimension, codeLength: code.length });
 
-    if (!openscadPath) {
-      setError('OpenSCAD path not set');
+    if (!renderServiceRef.current) {
+      setError('RenderService not available');
       return;
     }
 
     setIsRendering(true);
     setError('');
-    setPreviewSrc(''); // Clear preview immediately when starting new render
 
     try {
-      console.log('[doRender] Calling renderPreview...');
-      const result: RenderPreviewResponse = await renderPreview(openscadPath, {
-        source: code,
+      const result = await renderServiceRef.current.render(code, {
         view: dimension,
-        size: { w: 800, h: 600 },
-        render_mesh: dimension === '3d', // Always use mesh for 3D mode
-        working_dir: workingDir || undefined,
+        backend: 'manifold',
       });
 
-      console.log('[doRender] Render success:', { kind: result.kind, path: result.path, diagnostics: result.diagnostics.length });
+      if (import.meta.env.DEV) {
+        console.log('[doRender] Render success:', {
+          kind: result.kind,
+          outputSize: result.output.length,
+          diagnostics: result.diagnostics.length,
+        });
+      }
+
       setDiagnostics(result.diagnostics);
       setPreviewKind(result.kind);
 
-      // Convert file path to asset URL that Tauri can serve
-      // Add timestamp to bust browser cache
-      const assetUrl = convertFileSrc(result.path);
-      const cacheBustedUrl = `${assetUrl}?t=${Date.now()}`;
-      console.log('[doRender] Setting preview src:', cacheBustedUrl);
-      setPreviewSrc(cacheBustedUrl);
-    } catch (err) {
-      const errorMsg = typeof err === 'string' ? err : String(err);
-      console.log('[doRender] Render error:', errorMsg);
-
-      // Fetch diagnostics from backend EditorState (errors may have been stored there)
-      try {
-        const diagnosticsFromBackend = await getDiagnostics();
-        if (diagnosticsFromBackend.length > 0) {
-          setDiagnostics(diagnosticsFromBackend);
-        }
-      } catch (diagErr) {
-        console.error('[doRender] Failed to fetch diagnostics:', diagErr);
+      // Revoke previous Blob URL to prevent memory leaks
+      if (prevBlobUrlRef.current) {
+        URL.revokeObjectURL(prevBlobUrlRef.current);
       }
 
-      // Check if error is due to dimension mismatch and auto-retry with opposite mode
-      const is2DObjectIn3DMode = errorMsg.includes('2D object') && errorMsg.includes('3D mode');
-      const is3DObjectIn2DMode = errorMsg.includes('3D object') && errorMsg.includes('2D mode');
-
-      if (is2DObjectIn3DMode || is3DObjectIn2DMode) {
-        const newDimension = dimension === '2d' ? '3d' : '2d';
-        console.log(`[doRender] Auto-switching from ${dimension} to ${newDimension} mode`);
-
-        // Update dimension mode
-        setDimensionMode(newDimension);
-
-        // Retry render with new dimension
-        try {
-          const retryResult: RenderPreviewResponse = await renderPreview(openscadPath, {
-            source: code,
-            view: newDimension,
-            size: { w: 800, h: 600 },
-            render_mesh: newDimension === '3d', // Always use mesh for 3D mode
-            working_dir: workingDir || undefined,
-          });
-
-          console.log('[doRender] Auto-retry success:', { kind: retryResult.kind, path: retryResult.path });
-          setDiagnostics(retryResult.diagnostics);
-          setPreviewKind(retryResult.kind);
-
-          const assetUrl = convertFileSrc(retryResult.path);
-          const cacheBustedUrl = `${assetUrl}?t=${Date.now()}`;
-          setPreviewSrc(cacheBustedUrl);
-          setError(''); // Clear error on successful retry
-        } catch (retryErr) {
-          // Both modes failed - show error
-          const retryErrorMsg = typeof retryErr === 'string' ? retryErr : String(retryErr);
-          console.log('[doRender] Auto-retry also failed:', retryErrorMsg);
-          setError(`Failed to render in both 2D and 3D modes.\n\nOriginal error: ${errorMsg}\n\nRetry error: ${retryErrorMsg}`);
-          setPreviewSrc('');
-        }
+      if (result.output.length > 0) {
+        // Create Blob URL from output bytes
+        const mimeType = result.kind === 'mesh' ? 'application/octet-stream' : 'image/svg+xml';
+        const blob = new Blob([result.output], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        prevBlobUrlRef.current = blobUrl;
+        setPreviewSrc(blobUrl);
       } else {
-        // Not a dimension mismatch error - just show it
-        setError(errorMsg);
+        // No output — check for errors in diagnostics
+        const errors = result.diagnostics.filter((d) => d.severity === 'error');
+        if (errors.length > 0) {
+          setError(errors.map((e) => e.message).join('\n'));
+        } else {
+          setError('Render produced no output');
+        }
         setPreviewSrc('');
       }
-
+    } catch (err) {
+      const errorMsg = typeof err === 'string' ? err : String(err);
+      if (import.meta.env.DEV) console.log('[doRender] Render error:', errorMsg);
+      setError(errorMsg);
+      setPreviewSrc('');
       console.error('Render error:', err);
     } finally {
       setIsRendering(false);
     }
-  }, [openscadPath, workingDir, setDimensionMode]);
-
-
-  const updateSource = useCallback((newSource: string) => {
-    console.log('[useOpenScad] updateSource called with new code length:', newSource.length);
-    setSource(newSource);
-    // Sync with backend EditorState for AI agent
-    updateEditorState(newSource).catch(err => {
-      console.error('Failed to update editor state:', err);
-    });
-    // No auto-render - only render on save or manual render button press
   }, []);
 
-  // Initial render when OpenSCAD path is found
+  const updateSource = useCallback((newSource: string) => {
+    if (import.meta.env.DEV)
+      console.log('[useOpenScad] updateSource called with new code length:', newSource.length);
+    setSource(newSource);
+  }, []);
+
+  // Atomically update source AND render with the new code.
+  // This bypasses the stale-closure problem where manualRender() would
+  // render with the previous `source` because React hasn't flushed the
+  // state update from updateSource() yet.
+  const updateSourceAndRender = useCallback(
+    (newSource: string) => {
+      if (import.meta.env.DEV)
+        console.log('[useOpenScad] updateSourceAndRender called', {
+          codeLength: newSource.length,
+          dimensionMode,
+        });
+      setSource(newSource);
+      lastRenderedSourceRef.current = newSource;
+      doRender(newSource, dimensionMode);
+    },
+    [dimensionMode, doRender]
+  );
+
+  // Initial render when WASM is ready
   useEffect(() => {
-    if (openscadPath && source) {
-      doRender(source, true); // Default to mesh rendering
+    if (ready && source) {
+      lastRenderedSourceRef.current = source;
+      doRender(source, dimensionMode);
     }
-  }, [openscadPath]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Function to clear preview (for when opening new files)
   const clearPreview = useCallback(() => {
+    if (prevBlobUrlRef.current) {
+      URL.revokeObjectURL(prevBlobUrlRef.current);
+      prevBlobUrlRef.current = '';
+    }
     setPreviewSrc('');
     setDiagnostics([]);
     setError('');
   }, []);
 
+  // Debounced auto-render on idle
+  const autoRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRenderedSourceRef = useRef<string>(source);
+
   // Manual render function (stable callback)
   const manualRender = useCallback(() => {
-    console.log('[useOpenScad] manualRender called', { sourceLength: source.length, dimensionMode });
-    doRender(source, true, dimensionMode);
+    if (import.meta.env.DEV)
+      console.log('[useOpenScad] manualRender called', {
+        sourceLength: source.length,
+        dimensionMode,
+      });
+    lastRenderedSourceRef.current = source;
+    doRender(source, dimensionMode);
   }, [source, dimensionMode, doRender]);
 
   // Render on save function (stable callback)
   const renderOnSave = useCallback(() => {
-    doRender(source, true, dimensionMode);
+    lastRenderedSourceRef.current = source;
+    doRender(source, dimensionMode);
   }, [source, dimensionMode, doRender]);
+
+  useEffect(() => {
+    if (!autoRenderOnIdle || !ready) return;
+    if (source === lastRenderedSourceRef.current) return;
+
+    if (autoRenderTimerRef.current) {
+      clearTimeout(autoRenderTimerRef.current);
+    }
+
+    autoRenderTimerRef.current = setTimeout(() => {
+      lastRenderedSourceRef.current = source;
+      doRender(source, dimensionMode);
+    }, autoRenderDelayMs);
+
+    return () => {
+      if (autoRenderTimerRef.current) {
+        clearTimeout(autoRenderTimerRef.current);
+      }
+    };
+  }, [source, autoRenderOnIdle, autoRenderDelayMs, ready, doRender, dimensionMode]);
+
+  // Cleanup Blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (prevBlobUrlRef.current) {
+        URL.revokeObjectURL(prevBlobUrlRef.current);
+      }
+    };
+  }, []);
 
   return {
     source,
     updateSource,
+    updateSourceAndRender,
     previewSrc,
     previewKind,
     diagnostics,
     isRendering,
     error,
-    openscadPath,
-    setOpenscadPath,
+    ready,
     dimensionMode,
     manualRender,
     renderOnSave,

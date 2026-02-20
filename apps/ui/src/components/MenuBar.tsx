@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { save, open } from '@tauri-apps/plugin-dialog';
-import { renderExact, type ExportFormat } from '../api/tauri';
+import { toast } from 'sonner';
+import { getPlatform, type ExportFormat } from '../platform';
+import { RenderService } from '../services/renderService';
 
 interface MenuBarProps {
   source: string;
   onSourceChange: (source: string) => void;
   currentFilePath: string | null;
   onFilePathChange: (path: string | null) => void;
-  openscadPath: string;
 }
 
 const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
@@ -15,12 +15,16 @@ const EXPORT_FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'obj', label: 'OBJ (3D Model)', ext: 'obj' },
   { value: 'amf', label: 'AMF (3D Model)', ext: 'amf' },
   { value: '3mf', label: '3MF (3D Model)', ext: '3mf' },
-  { value: 'png', label: 'PNG (Image)', ext: 'png' },
   { value: 'svg', label: 'SVG (2D Vector)', ext: 'svg' },
   { value: 'dxf', label: 'DXF (2D CAD)', ext: 'dxf' },
 ];
 
-export function MenuBar({ source, onSourceChange, currentFilePath, onFilePathChange, openscadPath }: MenuBarProps) {
+export function MenuBar({
+  source,
+  onSourceChange,
+  currentFilePath,
+  onFilePathChange,
+}: MenuBarProps) {
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -42,27 +46,15 @@ export function MenuBar({ source, onSourceChange, currentFilePath, onFilePathCha
     setFileMenuOpen(false);
 
     try {
-      let savePath = currentFilePath;
-
-      if (!savePath) {
-        // Show save dialog if no current file
-        savePath = await save({
-          filters: [{
-            name: 'OpenSCAD Files',
-            extensions: ['scad']
-          }]
-        });
-
-        if (!savePath) return; // User cancelled
+      const platform = getPlatform();
+      const filters = [{ name: 'OpenSCAD Files', extensions: ['scad'] }];
+      const savePath = await platform.fileSave(source, currentFilePath, filters);
+      if (savePath) {
+        onFilePathChange(savePath);
       }
-
-      // Write file using Tauri's fs
-      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-      await writeTextFile(savePath, source);
-      onFilePathChange(savePath);
     } catch (err) {
       console.error('Save failed:', err);
-      alert(`Failed to save file: ${err}`);
+      toast.error(`Failed to save file: ${err}`);
     }
   };
 
@@ -70,27 +62,16 @@ export function MenuBar({ source, onSourceChange, currentFilePath, onFilePathCha
     setFileMenuOpen(false);
 
     try {
-      const selected = await open({
-        filters: [{
-          name: 'OpenSCAD Files',
-          extensions: ['scad']
-        }],
-        multiple: false
-      });
+      const result = await getPlatform().fileOpen([
+        { name: 'OpenSCAD Files', extensions: ['scad'] },
+      ]);
+      if (!result) return;
 
-      if (!selected) return; // User cancelled
-
-      const filePath = typeof selected === 'string' ? selected : (selected as { path: string }).path;
-
-      // Read file using Tauri's fs
-      const { readTextFile } = await import('@tauri-apps/plugin-fs');
-      const contents = await readTextFile(filePath);
-
-      onSourceChange(contents);
-      onFilePathChange(filePath);
+      onSourceChange(result.content);
+      onFilePathChange(result.path);
     } catch (err) {
       console.error('Open failed:', err);
-      alert(`Failed to open file: ${err}`);
+      toast.error(`Failed to open file: ${err}`);
     }
   };
 
@@ -99,28 +80,22 @@ export function MenuBar({ source, onSourceChange, currentFilePath, onFilePathCha
     setExportMenuOpen(false);
 
     try {
-      const formatInfo = EXPORT_FORMATS.find(f => f.value === format);
+      const formatInfo = EXPORT_FORMATS.find((f) => f.value === format);
       if (!formatInfo) return;
 
-      const savePath = await save({
-        filters: [{
-          name: formatInfo.label,
-          extensions: [formatInfo.ext]
-        }]
-      });
-
-      if (!savePath) return; // User cancelled
-
-      await renderExact(openscadPath, {
+      const exportBytes = await RenderService.getInstance().exportModel(
         source,
-        format,
-        out_path: savePath,
-      });
+        format as 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf'
+      );
 
-      alert(`Exported successfully to ${savePath}`);
+      await getPlatform().fileExport(exportBytes, `export.${formatInfo.ext}`, [
+        { name: formatInfo.label, extensions: [formatInfo.ext] },
+      ]);
+
+      toast.success('Exported successfully');
     } catch (err) {
       console.error('Export failed:', err);
-      alert(`Export failed: ${err}`);
+      toast.error(`Export failed: ${err}`);
     }
   };
 
@@ -167,7 +142,7 @@ export function MenuBar({ source, onSourceChange, currentFilePath, onFilePathCha
                 className="absolute left-full top-0 ml-1 w-48 bg-gray-800 border border-gray-700 rounded shadow-lg"
                 onMouseLeave={() => setExportMenuOpen(false)}
               >
-                {EXPORT_FORMATS.map(format => (
+                {EXPORT_FORMATS.map((format) => (
                   <button
                     key={format.value}
                     onClick={() => handleExport(format.value)}

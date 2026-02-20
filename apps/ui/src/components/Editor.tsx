@@ -1,8 +1,8 @@
 import { Editor as MonacoEditor } from '@monaco-editor/react';
-import type { Diagnostic } from '../api/tauri';
+import type { Diagnostic } from '../platform/historyService';
 import { useEffect, useRef, useState } from 'react';
 import type * as Monaco from 'monaco-editor';
-import { listen } from '@tauri-apps/api/event';
+import { eventBus } from '../platform';
 import { formatOpenScadCode } from '../utils/formatter';
 import { loadSettings, type Settings } from '../stores/settingsStore';
 import { getTheme } from '../themes';
@@ -18,7 +18,13 @@ interface EditorProps {
   settings?: Settings;
 }
 
-export function Editor({ value, onChange, diagnostics, onManualRender, settings: propSettings }: EditorProps) {
+export function Editor({
+  value,
+  onChange,
+  diagnostics,
+  onManualRender,
+  settings: propSettings,
+}: EditorProps) {
   const [settings, setSettings] = useState<Settings>(propSettings || loadSettings());
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof Monaco | null>(null);
@@ -66,7 +72,7 @@ export function Editor({ value, onChange, diagnostics, onManualRender, settings:
 
       // Initialize vim mode
       if (!vimModeRef.current) {
-        console.log('[Editor] Initializing vim mode');
+        if (import.meta.env.DEV) console.log('[Editor] Initializing vim mode');
         vimModeRef.current = initVimMode(editorRef.current, statusBarRef.current);
       }
 
@@ -79,7 +85,7 @@ export function Editor({ value, onChange, diagnostics, onManualRender, settings:
     } else {
       // Dispose vim mode if it exists
       if (vimModeRef.current) {
-        console.log('[Editor] Disposing vim mode');
+        if (import.meta.env.DEV) console.log('[Editor] Disposing vim mode');
         vimModeRef.current.dispose();
         vimModeRef.current = null;
       }
@@ -98,21 +104,17 @@ export function Editor({ value, onChange, diagnostics, onManualRender, settings:
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
-    const setupListener = async () => {
-      console.log('[Editor] Setting up code-updated listener');
-      unlisten = await listen<string>('code-updated', (event) => {
-        console.log('[Editor] ✅ Received code-updated event, payload length:', event.payload.length);
-        console.log('[Editor] Calling onChange with new code');
-        onChange(event.payload);
-      });
-      console.log('[Editor] code-updated listener setup complete');
-    };
-
-    setupListener();
+    if (import.meta.env.DEV) console.log('[Editor] Setting up code-updated listener');
+    unlisten = eventBus.on('code-updated', ({ code }) => {
+      if (import.meta.env.DEV)
+        console.log('[Editor] Received code-updated event, payload length:', code.length);
+      onChange(code);
+    });
+    if (import.meta.env.DEV) console.log('[Editor] code-updated listener setup complete');
 
     return () => {
       if (unlisten) {
-        console.log('[Editor] Cleaning up code-updated listener');
+        if (import.meta.env.DEV) console.log('[Editor] Cleaning up code-updated listener');
         unlisten();
       }
     };
@@ -127,12 +129,13 @@ export function Editor({ value, onChange, diagnostics, onManualRender, settings:
     if (!model) return;
 
     // Convert diagnostics to Monaco markers
-    const markers: Monaco.editor.IMarkerData[] = diagnostics.map(diag => ({
-      severity: diag.severity === 'error'
-        ? monaco.MarkerSeverity.Error
-        : diag.severity === 'warning'
-        ? monaco.MarkerSeverity.Warning
-        : monaco.MarkerSeverity.Info,
+    const markers: Monaco.editor.IMarkerData[] = diagnostics.map((diag) => ({
+      severity:
+        diag.severity === 'error'
+          ? monaco.MarkerSeverity.Error
+          : diag.severity === 'warning'
+            ? monaco.MarkerSeverity.Warning
+            : monaco.MarkerSeverity.Info,
       startLineNumber: diag.line ?? 1,
       startColumn: diag.col ?? 1,
       endLineNumber: diag.line ?? 1,
@@ -204,11 +207,10 @@ export function Editor({ value, onChange, diagnostics, onManualRender, settings:
     });
 
     // Add keyboard shortcut for save (Cmd+S / Ctrl+S)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, async () => {
-      console.log('[Editor] Save triggered via Cmd+S');
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      if (import.meta.env.DEV) console.log('[Editor] Save triggered via Cmd+S');
       // Emit the save event so App.tsx can handle formatting and file save
-      const { emit } = await import('@tauri-apps/api/event');
-      await emit('menu:file:save');
+      eventBus.emit('menu:file:save');
     });
 
     // Ensure full OpenSCAD language support (syntax, config, tokens)

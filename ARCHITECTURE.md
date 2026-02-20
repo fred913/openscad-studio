@@ -2,6 +2,15 @@
 
 Design document for running OpenSCAD Studio on **both** Tauri desktop (native OpenSCAD binary) and web browser (openscad-wasm), from a shared React codebase.
 
+> **✅ Implementation Complete (v0.7.0)**: This document was the design spec for the web version. The implementation is now live at [openscad-studio.pages.dev](https://openscad-studio.pages.dev). Key differences from this spec:
+>
+> - Platform abstraction lives in `apps/ui/src/platform/` (not `packages/platform/` as planned)
+> - No separate platform package — bridge implementations are in the main app
+> - AI service uses Vercel AI SDK instead of direct fetch to Anthropic API
+> - OpenAI is supported on web (not just Anthropic)
+> - Conversations use localStorage (not IndexedDB as suggested)
+> - The rendering service, file system, AI service, storage, and window service are all implemented as planned
+
 ## Goals
 
 1. **Desktop stays fast**: Native OpenSCAD binary, encrypted key storage, native file dialogs, native menus. Zero regression.
@@ -230,7 +239,7 @@ export interface AiService {
     messages: LegacyMessage[],
     model: string,
     provider: string,
-    mode: string,
+    mode: string
   ): Promise<void>;
 
   /** Cancel the current streaming query */
@@ -304,7 +313,7 @@ export interface HistoryService {
     code: string,
     diagnostics: Diagnostic[],
     label: string,
-    changeType: 'user' | 'ai',
+    changeType: 'user' | 'ai'
   ): Promise<string>;
 
   undo(): Promise<{ code: string; diagnostics: Diagnostic[] } | null>;
@@ -354,7 +363,7 @@ packages/
       tauri/
         index.ts                  # createTauriPlatform(): Platform
         rendering.ts              # TauriRenderingService
-        fileSystem.ts             # TauriFileSystemService  
+        fileSystem.ts             # TauriFileSystemService
         ai.ts                     # TauriAiService (wraps existing Rust agent)
         storage.ts                # TauriStorageService (encrypted store)
         conversations.ts          # TauriConversationService
@@ -388,14 +397,14 @@ apps/
 
 ### What Moves vs. What Stays
 
-| Current Location | Action |
-|---|---|
-| `apps/ui/src/api/tauri.ts` | Logic moves to `packages/platform/src/tauri/`. File kept as re-exports during migration, then removed. |
+| Current Location                   | Action                                                                                                            |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `apps/ui/src/api/tauri.ts`         | Logic moves to `packages/platform/src/tauri/`. File kept as re-exports during migration, then removed.            |
 | `apps/ui/src/hooks/useOpenScad.ts` | Refactored: replace `import { renderPreview } from '../api/tauri'` with `usePlatform().rendering.renderPreview()` |
-| `apps/ui/src/hooks/useAiAgent.ts` | Refactored: replace `invoke()`/`listen()` calls with `usePlatform().ai.*` |
-| `apps/ui/src/App.tsx` | Refactored: replace Tauri file dialog imports, `convertFileSrc`, `getCurrentWindow` with platform equivalents |
-| `apps/ui/src/components/*` | **No changes** — components receive data via hooks/context, don't import platform code |
-| `apps/ui/src-tauri/` | **No changes** — Rust backend stays as-is |
+| `apps/ui/src/hooks/useAiAgent.ts`  | Refactored: replace `invoke()`/`listen()` calls with `usePlatform().ai.*`                                         |
+| `apps/ui/src/App.tsx`              | Refactored: replace Tauri file dialog imports, `convertFileSrc`, `getCurrentWindow` with platform equivalents     |
+| `apps/ui/src/components/*`         | **No changes** — components receive data via hooks/context, don't import platform code                            |
+| `apps/ui/src-tauri/`               | **No changes** — Rust backend stays as-is                                                                         |
 
 ---
 
@@ -489,12 +498,12 @@ WebRenderingService                 openscad.worker.ts
 
 export type WorkerRequest =
   | { type: 'init' }
-  | { type: 'render'; id: string; source: string; args: string[]; outputFile: string }
+  | { type: 'render'; id: string; source: string; args: string[]; outputFile: string };
 
 export type WorkerResponse =
   | { type: 'ready'; version: string }
   | { type: 'result'; id: string; output: Uint8Array; stderr: string }
-  | { type: 'error'; id: string; error: string }
+  | { type: 'error'; id: string; error: string };
 ```
 
 ### Diagnostics Parsing
@@ -676,42 +685,42 @@ Each phase is independently shippable. Desktop never regresses.
 
 ## What Changes Per Component
 
-| Component | Desktop | Web | Changes Needed |
-|---|---|---|---|
-| `Editor.tsx` | Monaco editor | Same | None |
-| `ThreeViewer.tsx` | Loads STL from asset URL | Loads STL from blob URL | None (both are URLs) |
-| `SvgViewer.tsx` | Loads SVG from asset URL | Loads SVG from blob URL | None (both are URLs) |
-| `AiPromptPanel.tsx` | Renders messages/tools | Same | None |
-| `SettingsDialog.tsx` | Encrypted API key storage | localStorage warning | Minor: show security note on web |
-| `ExportDialog.tsx` | Save to disk | Download file | Minor: different UX text |
-| `WelcomeScreen.tsx` | Recent files from disk | Recent files from localStorage | Minor: source differs |
-| `OpenScadSetupScreen.tsx` | Shows when OpenSCAD not found | Not shown (WASM always available) | Conditionally rendered |
-| `TabBar.tsx` | File paths in tabs | Filenames only | Minor |
-| `MenuBar.tsx` (new) | Not needed (native menus) | Needed for web | New component for web only |
+| Component                 | Desktop                       | Web                               | Changes Needed                   |
+| ------------------------- | ----------------------------- | --------------------------------- | -------------------------------- |
+| `Editor.tsx`              | Monaco editor                 | Same                              | None                             |
+| `ThreeViewer.tsx`         | Loads STL from asset URL      | Loads STL from blob URL           | None (both are URLs)             |
+| `SvgViewer.tsx`           | Loads SVG from asset URL      | Loads SVG from blob URL           | None (both are URLs)             |
+| `AiPromptPanel.tsx`       | Renders messages/tools        | Same                              | None                             |
+| `SettingsDialog.tsx`      | Encrypted API key storage     | localStorage warning              | Minor: show security note on web |
+| `ExportDialog.tsx`        | Save to disk                  | Download file                     | Minor: different UX text         |
+| `WelcomeScreen.tsx`       | Recent files from disk        | Recent files from localStorage    | Minor: source differs            |
+| `OpenScadSetupScreen.tsx` | Shows when OpenSCAD not found | Not shown (WASM always available) | Conditionally rendered           |
+| `TabBar.tsx`              | File paths in tabs            | Filenames only                    | Minor                            |
+| `MenuBar.tsx` (new)       | Not needed (native menus)     | Needed for web                    | New component for web only       |
 
 ---
 
-## Open Questions
+## Open Questions (Answered)
 
-1. **AI on web — Anthropic-only?** Anthropic supports browser CORS. OpenAI does not. Should we support only Anthropic on web, or build a lightweight CORS proxy?
+1. **AI on web — Anthropic-only?** ✅ **Answered:** Both Anthropic and OpenAI are supported on web via Vercel AI SDK.
 
-2. **AI tool: get_preview_screenshot on web?** Desktop returns a file path the AI model can reference. On web, we'd need to return a base64 data URL or skip this tool. Could return "screenshot not available in web mode" and let the AI work without it.
+2. **AI tool: get_preview_screenshot on web?** ✅ **Answered:** Screenshots work on web via canvas capture.
 
-3. **Working directory / relative imports on web?** Desktop resolves `use <file.scad>` via working_dir. On web, there's no real filesystem. Options: (a) single-file only on web, (b) let user upload a folder, (c) virtual filesystem in the worker. Start with (a).
+3. **Working directory / relative imports on web?** ✅ **Answered:** Single-file only on web currently. Desktop uses working_dir for `use`/`include`.
 
-4. **WASM bundle size**: The `openscad-wasm` package is ~13MB uncompressed. With gzip/brotli it compresses to ~3-4MB. Is a loading spinner acceptable on first load? Should we lazy-load it?
+4. **WASM bundle size**: ✅ **Answered:** Loading screen shown during WASM download (~3-4MB compressed). Acceptable UX with animated spinner.
 
-5. **Web deployment**: Static files to GitHub Pages? Vercel? Netlify? Or just document how to self-host?
+5. **Web deployment**: ✅ **Answered:** Cloudflare Pages at openscad-studio.pages.dev, deployed via GitHub Actions.
 
 ---
 
 ## Success Criteria
 
-- [ ] `pnpm tauri:dev` works exactly as before (zero regression)
-- [ ] `pnpm dev:web` serves a working web version
-- [ ] Web: Can type OpenSCAD code and see live 3D preview
-- [ ] Web: Can export STL/OBJ/SVG (downloads to browser)
-- [ ] Web: AI chat works (at least with Anthropic)
-- [ ] Web: Settings persist across page reloads
-- [ ] No `@tauri-apps/*` imports outside of `packages/platform/src/tauri/`
-- [ ] Components in `apps/ui/src/components/` have zero platform-specific imports
+- [x] `pnpm tauri:dev` works exactly as before (zero regression)
+- [x] `pnpm web:dev` serves a working web version
+- [x] Web: Can type OpenSCAD code and see live 3D preview
+- [x] Web: Can export STL/OBJ/SVG (downloads to browser)
+- [x] Web: AI chat works (with both Anthropic and OpenAI)
+- [x] Web: Settings persist across page reloads
+- [x] No `@tauri-apps/*` imports outside of platform bridge (`apps/ui/src/platform/tauriBridge.ts`)
+- [x] Components in `apps/ui/src/components/` have zero platform-specific imports

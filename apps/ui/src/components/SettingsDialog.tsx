@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { loadSettings, saveSettings, getDefaultVimConfig, type Settings } from '../stores/settingsStore';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  loadSettings,
+  saveSettings,
+  getDefaultVimConfig,
+  type Settings,
+} from '../stores/settingsStore';
 import { getAvailableThemes, getTheme } from '../themes';
 import { useTheme } from '../contexts/ThemeContext';
 import { Button, Input, Select, Label, Toggle } from './ui';
@@ -8,18 +12,23 @@ import { Editor as MonacoEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import { registerVimConfigLanguage } from '../languages/vimConfigLanguage';
 import { TbPalette, TbCode, TbSparkles, TbX } from 'react-icons/tb';
+import {
+  invalidateApiKeyStatus,
+  storeApiKey as storeApiKeyToStorage,
+  clearApiKey as clearApiKeyFromStorage,
+  hasApiKeyForProvider,
+  getAvailableProviders as getAvailableProvidersFromStore,
+} from '../stores/apiKeyStore';
+import { getPlatform } from '../platform';
+import { applyWorkspacePreset } from '../stores/layoutStore';
 
 interface SettingsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSettingsChange?: (settings: Settings) => void;
+  initialTab?: SettingsSection;
 }
 
-function saveVimConfigIfChanged(
-  localVimConfig: string,
-  currentSettings: Settings,
-  onSettingsChange?: (settings: Settings) => void
-) {
+function saveVimConfigIfChanged(localVimConfig: string, currentSettings: Settings) {
   if (localVimConfig !== currentSettings.editor.vimConfig) {
     const updated = {
       ...currentSettings,
@@ -29,15 +38,14 @@ function saveVimConfigIfChanged(
       },
     };
     saveSettings(updated);
-    onSettingsChange?.(updated);
   }
 }
 
-type SettingsSection = 'appearance' | 'editor' | 'ai';
+export type SettingsSection = 'appearance' | 'editor' | 'ai';
 type EditorSubTab = 'general' | 'vim';
 
-export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDialogProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('appearance');
+export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogProps) {
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialTab ?? 'appearance');
   const [editorSubTab, setEditorSubTab] = useState<EditorSubTab>('general');
   const [settings, setSettings] = useState<Settings>(loadSettings());
   const { updateTheme } = useTheme();
@@ -52,42 +60,33 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
   const [apiKey, setApiKey] = useState('');
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAIKey, setHasOpenAIKey] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
 
-  // Load settings when dialog opens
+  const loadAISettings = useCallback(() => {
+    const availableProviders = getAvailableProvidersFromStore();
+    setHasAnthropicKey(availableProviders.includes('anthropic'));
+    setHasOpenAIKey(availableProviders.includes('openai'));
+
+    const hasCurrentKey = hasApiKeyForProvider(provider);
+    if (hasCurrentKey) {
+      setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
+    } else {
+      setApiKey('');
+    }
+  }, [provider]);
+
   useEffect(() => {
     if (isOpen) {
       const loadedSettings = loadSettings();
       setSettings(loadedSettings);
       setLocalVimConfig(loadedSettings.editor.vimConfig);
       loadAISettings();
+      if (initialTab) setActiveSection(initialTab);
     }
-  }, [isOpen]);
-
-  const loadAISettings = async () => {
-    try {
-      // Check which providers have keys
-      const availableProviders = await invoke<string[]>('get_available_providers');
-      setHasAnthropicKey(availableProviders.includes('anthropic'));
-      setHasOpenAIKey(availableProviders.includes('openai'));
-
-      const currentProvider = await invoke<string>('get_ai_provider');
-      setProvider(currentProvider as 'anthropic' | 'openai');
-
-      // Load the masked key for the current provider if it exists
-      const hasCurrentKey = availableProviders.includes(currentProvider);
-      if (hasCurrentKey) {
-        setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
-      } else {
-        setApiKey('');
-      }
-    } catch (err) {
-      console.error('Failed to load AI settings:', err);
-    }
-  };
+  }, [isOpen, initialTab, loadAISettings]);
 
   const handleAppearanceSettingChange = <K extends keyof Settings['appearance']>(
     key: K,
@@ -101,9 +100,8 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
       },
     };
     setSettings(updated);
-    onSettingsChange?.(updated);
+    saveSettings(updated);
 
-    // Update theme via context (context handles persistence and applying CSS)
     if (key === 'theme') {
       updateTheme(value as string);
     }
@@ -122,75 +120,65 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
     };
     setSettings(updated);
     saveSettings(updated);
-    onSettingsChange?.(updated);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!apiKey.trim() || apiKey.startsWith('•')) {
       setError('Please enter a valid API key');
       return;
     }
 
-    setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
-    try {
-      await invoke('store_api_key', { provider, key: apiKey });
-      setSuccessMessage(`${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key saved successfully!`);
+    storeApiKeyToStorage(provider, apiKey);
+    invalidateApiKeyStatus();
+    setSuccessMessage(
+      `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key saved successfully!`
+    );
 
-      // Update the appropriate key status
-      if (provider === 'anthropic') {
-        setHasAnthropicKey(true);
-      } else {
-        setHasOpenAIKey(true);
-      }
-
-      setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
-      setShowKey(false);
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    } catch (err) {
-      setError(`Failed to save API key: ${err}`);
-    } finally {
-      setIsLoading(false);
+    if (provider === 'anthropic') {
+      setHasAnthropicKey(true);
+    } else {
+      setHasOpenAIKey(true);
     }
+
+    setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
+    setShowKey(false);
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
   };
 
   const handleClear = async () => {
-    const confirmed = confirm(`Are you sure you want to remove your ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key?`);
+    const confirmed = await getPlatform().confirm(
+      `Are you sure you want to remove your ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key?`,
+      { title: 'Remove API Key', kind: 'warning', okLabel: 'Remove', cancelLabel: 'Cancel' }
+    );
     if (!confirmed) return;
 
-    setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
 
-    try {
-      await invoke('clear_api_key');
-      setSuccessMessage('API key cleared successfully');
+    clearApiKeyFromStorage(provider);
+    invalidateApiKeyStatus();
+    setSuccessMessage('API key cleared successfully');
 
-      // Update the appropriate key status
-      if (provider === 'anthropic') {
-        setHasAnthropicKey(false);
-      } else {
-        setHasOpenAIKey(false);
-      }
-
-      setApiKey('');
-      setTimeout(() => {
-        setSuccessMessage(null);
-      }, 3000);
-    } catch (err) {
-      setError(`Failed to clear API key: ${err}`);
-    } finally {
-      setIsLoading(false);
+    if (provider === 'anthropic') {
+      setHasAnthropicKey(false);
+    } else {
+      setHasOpenAIKey(false);
     }
+
+    setApiKey('');
+    setTimeout(() => {
+      setSuccessMessage(null);
+    }, 3000);
   };
 
   const handleClose = () => {
     // Save vim config changes before closing
-    saveVimConfigIfChanged(localVimConfig, settings, onSettingsChange);
+    saveVimConfigIfChanged(localVimConfig, settings);
     onClose();
   };
 
@@ -206,6 +194,7 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
     <div
       className="fixed inset-0 flex items-center justify-center z-50"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={handleClose}
     >
       <div
         className="rounded-xl shadow-2xl w-full max-w-3xl mx-4 flex h-[600px] overflow-hidden"
@@ -213,14 +202,23 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
           backgroundColor: 'var(--bg-secondary)',
           border: '1px solid var(--border-primary)',
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Left Sidebar */}
         <div
           className="w-52 flex flex-col"
-          style={{ backgroundColor: 'var(--bg-primary)', borderRight: '1px solid var(--border-primary)' }}
+          style={{
+            backgroundColor: 'var(--bg-primary)',
+            borderRight: '1px solid var(--border-primary)',
+          }}
         >
           <div className="px-5 py-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>Settings</h2>
+            <h2
+              className="text-sm font-semibold uppercase tracking-wider"
+              style={{ color: 'var(--text-tertiary)' }}
+            >
+              Settings
+            </h2>
           </div>
           <nav className="flex-1 px-3 space-y-1">
             {navItems.map((item) => (
@@ -230,8 +228,10 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                 onClick={() => setActiveSection(item.key)}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150"
                 style={{
-                  backgroundColor: activeSection === item.key ? 'var(--accent-primary)' : 'transparent',
-                  color: activeSection === item.key ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                  backgroundColor:
+                    activeSection === item.key ? 'var(--accent-primary)' : 'transparent',
+                  color:
+                    activeSection === item.key ? 'var(--text-inverse)' : 'var(--text-secondary)',
                   fontWeight: activeSection === item.key ? '500' : 'normal',
                 }}
                 onMouseEnter={(e) => {
@@ -262,8 +262,11 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
             style={{ borderBottom: '1px solid var(--border-primary)' }}
           >
             <h3 className="text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
-              {activeSection === 'appearance' ? 'Appearance' :
-               activeSection === 'editor' ? 'Editor' : 'AI Assistant'}
+              {activeSection === 'appearance'
+                ? 'Appearance'
+                : activeSection === 'editor'
+                  ? 'Editor'
+                  : 'AI Assistant'}
             </h3>
             <button
               type="button"
@@ -287,29 +290,154 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {activeSection === 'appearance' && (
               <div className="space-y-6">
-                {/* Theme Selector */}
-                <div
-                  className="rounded-lg p-4"
-                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}
-                >
+                <div>
+                  <Label>Default Layout</Label>
+                  <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
+                    Choose which panel arrangement to use as your default workspace
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { preset: 'default' as const, label: 'Editor First' },
+                      { preset: 'ai-first' as const, label: 'AI First' },
+                    ].map(({ preset, label }) => {
+                      const isActive = settings.ui.defaultLayoutPreset === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            const updated = {
+                              ...settings,
+                              ui: { ...settings.ui, defaultLayoutPreset: preset },
+                            };
+                            setSettings(updated);
+                            saveSettings(updated);
+                            applyWorkspacePreset(preset);
+                          }}
+                          className="rounded-md p-3 text-left transition-all duration-150"
+                          style={{
+                            backgroundColor: 'var(--bg-primary)',
+                            border: isActive
+                              ? '2px solid var(--accent-primary)'
+                              : '1px solid var(--border-primary)',
+                            padding: isActive ? 'calc(0.75rem - 1px)' : undefined,
+                            boxShadow: isActive ? '0 0 0 1px var(--accent-primary)' : undefined,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.transform = 'none';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }
+                          }}
+                        >
+                          <span
+                            className="text-sm"
+                            style={{
+                              color: 'var(--text-primary)',
+                              fontWeight: isActive ? 600 : 400,
+                            }}
+                          >
+                            {label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
                   <Label>Theme</Label>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
                     Choose a color theme for the entire application
                   </p>
-                  <Select
-                    value={settings.appearance.theme}
-                    onChange={(e) => handleAppearanceSettingChange('theme', e.target.value)}
-                  >
-                    {availableThemes.map((section) => (
-                      <optgroup key={section.category} label={section.category}>
-                        {section.themes.map((theme) => (
-                          <option key={theme.id} value={theme.id}>
-                            {theme.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </Select>
+                  {availableThemes.map((section) => (
+                    <div key={section.category} className="mb-4">
+                      <div
+                        className="text-xs font-semibold uppercase tracking-wider mb-2"
+                        style={{ color: 'var(--text-tertiary)' }}
+                      >
+                        {section.category}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {section.themes.map((t) => {
+                          const themeData = getTheme(t.id);
+                          const isSelected = settings.appearance.theme === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => handleAppearanceSettingChange('theme', t.id)}
+                              className="flex flex-col rounded-md p-2.5 text-left transition-all duration-150"
+                              style={{
+                                backgroundColor: 'var(--bg-primary)',
+                                border: isSelected
+                                  ? '2px solid var(--accent-primary)'
+                                  : '1px solid var(--border-primary)',
+                                padding: isSelected ? 'calc(0.625rem - 1px)' : undefined,
+                                boxShadow: isSelected
+                                  ? '0 0 0 1px var(--accent-primary)'
+                                  : undefined,
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.transform = 'translateY(-1px)';
+                                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.transform = 'none';
+                                  e.currentTarget.style.boxShadow = 'none';
+                                }
+                              }}
+                            >
+                              <span
+                                className="text-xs mb-1.5 truncate w-full"
+                                style={{
+                                  color: 'var(--text-primary)',
+                                  fontWeight: isSelected ? 600 : 400,
+                                }}
+                              >
+                                {t.name}
+                              </span>
+                              <div className="flex h-3 rounded-sm overflow-hidden w-full">
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.bg.primary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.accent.primary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.text.primary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.bg.secondary }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.semantic.error }}
+                                />
+                                <div
+                                  className="flex-1"
+                                  style={{ background: themeData.colors.semantic.success }}
+                                />
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -319,15 +447,22 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                 {/* Subtabs */}
                 <div
                   className="inline-flex rounded-lg p-1"
-                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)' }}
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-primary)',
+                  }}
                 >
                   <button
                     type="button"
                     onClick={() => setEditorSubTab('general')}
                     className="px-4 py-1.5 text-sm rounded-md transition-all duration-150"
                     style={{
-                      backgroundColor: editorSubTab === 'general' ? 'var(--accent-primary)' : 'transparent',
-                      color: editorSubTab === 'general' ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                      backgroundColor:
+                        editorSubTab === 'general' ? 'var(--accent-primary)' : 'transparent',
+                      color:
+                        editorSubTab === 'general'
+                          ? 'var(--text-inverse)'
+                          : 'var(--text-secondary)',
                       fontWeight: editorSubTab === 'general' ? '500' : 'normal',
                     }}
                   >
@@ -338,8 +473,10 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                     onClick={() => setEditorSubTab('vim')}
                     className="px-4 py-1.5 text-sm rounded-md transition-all duration-150"
                     style={{
-                      backgroundColor: editorSubTab === 'vim' ? 'var(--accent-primary)' : 'transparent',
-                      color: editorSubTab === 'vim' ? 'var(--text-inverse)' : 'var(--text-secondary)',
+                      backgroundColor:
+                        editorSubTab === 'vim' ? 'var(--accent-primary)' : 'transparent',
+                      color:
+                        editorSubTab === 'vim' ? 'var(--text-inverse)' : 'var(--text-secondary)',
                       fontWeight: editorSubTab === 'vim' ? '500' : 'normal',
                     }}
                   >
@@ -368,15 +505,22 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                       </div>
                       <Toggle
                         checked={settings.editor.formatOnSave}
-                        onChange={(e) => handleEditorSettingChange('formatOnSave', e.target.checked)}
+                        onChange={(e) =>
+                          handleEditorSettingChange('formatOnSave', e.target.checked)
+                        }
                       />
                     </div>
 
-                    <div className="p-4" style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                    <div
+                      className="p-4"
+                      style={{ borderBottom: '1px solid var(--border-primary)' }}
+                    >
                       <Label>Indent Size</Label>
                       <Select
                         value={settings.editor.indentSize}
-                        onChange={(e) => handleEditorSettingChange('indentSize', Number(e.target.value))}
+                        onChange={(e) =>
+                          handleEditorSettingChange('indentSize', Number(e.target.value))
+                        }
                       >
                         <option value={2}>2 spaces</option>
                         <option value={4}>4 spaces</option>
@@ -396,6 +540,44 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                         onChange={(e) => handleEditorSettingChange('useTabs', e.target.checked)}
                       />
                     </div>
+
+                    <div
+                      className="flex items-center justify-between p-4"
+                      style={{ borderBottom: '1px solid var(--border-primary)' }}
+                    >
+                      <div>
+                        <Label className="mb-0">Auto-Render on Idle</Label>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                          Automatically render preview after you stop typing
+                        </p>
+                      </div>
+                      <Toggle
+                        checked={settings.editor.autoRenderOnIdle}
+                        onChange={(e) =>
+                          handleEditorSettingChange('autoRenderOnIdle', e.target.checked)
+                        }
+                      />
+                    </div>
+
+                    {settings.editor.autoRenderOnIdle && (
+                      <div
+                        className="p-4"
+                        style={{ borderBottom: '1px solid var(--border-primary)' }}
+                      >
+                        <Label>Render Delay</Label>
+                        <Select
+                          value={settings.editor.autoRenderDelayMs}
+                          onChange={(e) =>
+                            handleEditorSettingChange('autoRenderDelayMs', Number(e.target.value))
+                          }
+                        >
+                          <option value={300}>300ms (fast)</option>
+                          <option value={500}>500ms (default)</option>
+                          <option value={1000}>1 second</option>
+                          <option value={2000}>2 seconds</option>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -452,9 +634,17 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                           </button>
                         </div>
                         <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          Customize vim keybindings using vim-style commands. Lines starting with # are comments.
+                          Customize vim keybindings using vim-style commands. Lines starting with #
+                          are comments.
                         </p>
-                        <div style={{ height: '260px', border: '1px solid var(--border-primary)', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '260px',
+                            border: '1px solid var(--border-primary)',
+                            borderRadius: '6px',
+                            overflow: 'hidden',
+                          }}
+                        >
                           <MonacoEditor
                             key={`vim-config-editor-${settings.editor.vimMode}`}
                             height="100%"
@@ -522,9 +712,15 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                         </div>
                         <div className="flex items-center justify-between pt-1">
                           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                            Supported: <code style={{ color: 'var(--text-primary)' }}>map</code>, <code style={{ color: 'var(--text-primary)' }}>imap</code>, <code style={{ color: 'var(--text-primary)' }}>nmap</code>, <code style={{ color: 'var(--text-primary)' }}>vmap</code>
+                            Supported: <code style={{ color: 'var(--text-primary)' }}>map</code>,{' '}
+                            <code style={{ color: 'var(--text-primary)' }}>imap</code>,{' '}
+                            <code style={{ color: 'var(--text-primary)' }}>nmap</code>,{' '}
+                            <code style={{ color: 'var(--text-primary)' }}>vmap</code>
                             {' • '}
-                            Example: <code style={{ color: 'var(--text-primary)' }}>map kj &lt;Esc&gt; insert</code>
+                            Example:{' '}
+                            <code style={{ color: 'var(--text-primary)' }}>
+                              map kj &lt;Esc&gt; insert
+                            </code>
                           </p>
                           <button
                             type="button"
@@ -534,11 +730,20 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                             disabled={localVimConfig === settings.editor.vimConfig}
                             className="text-sm px-4 py-1.5 rounded-md transition-all duration-150 shrink-0 ml-3"
                             style={{
-                              backgroundColor: localVimConfig !== settings.editor.vimConfig ? 'var(--accent-primary)' : 'transparent',
-                              color: localVimConfig !== settings.editor.vimConfig ? 'white' : 'var(--text-tertiary)',
+                              backgroundColor:
+                                localVimConfig !== settings.editor.vimConfig
+                                  ? 'var(--accent-primary)'
+                                  : 'transparent',
+                              color:
+                                localVimConfig !== settings.editor.vimConfig
+                                  ? 'white'
+                                  : 'var(--text-tertiary)',
                               border: '1px solid var(--border-primary)',
                               opacity: localVimConfig !== settings.editor.vimConfig ? 1 : 0.5,
-                              cursor: localVimConfig !== settings.editor.vimConfig ? 'pointer' : 'not-allowed',
+                              cursor:
+                                localVimConfig !== settings.editor.vimConfig
+                                  ? 'pointer'
+                                  : 'not-allowed',
                             }}
                           >
                             Apply
@@ -554,7 +759,8 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
             {activeSection === 'ai' && (
               <div className="space-y-5">
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  Add your API keys to enable AI assistant features. Model selection is available in the chat interface.
+                  Add your API keys to enable AI assistant features. Model selection is available in
+                  the chat interface.
                 </p>
 
                 {/* Anthropic Section */}
@@ -567,15 +773,21 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                 >
                   <div className="flex items-center gap-3">
                     <Label className="mb-0">Anthropic API Key</Label>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{
-                      backgroundColor: hasAnthropicKey ? 'rgba(133, 153, 0, 0.15)' : 'rgba(128, 128, 128, 0.1)',
-                      color: hasAnthropicKey ? 'var(--color-success)' : 'var(--text-tertiary)',
-                    }}>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{
+                        backgroundColor: hasAnthropicKey
+                          ? 'rgba(133, 153, 0, 0.15)'
+                          : 'rgba(128, 128, 128, 0.1)',
+                        color: hasAnthropicKey ? 'var(--color-success)' : 'var(--text-tertiary)',
+                      }}
+                    >
                       {hasAnthropicKey ? 'Configured' : 'Not configured'}
                     </span>
                   </div>
                   <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    Required for Claude models. Your key is stored securely and never leaves your device.
+                    Required for Claude models. Your key is stored securely and never leaves your
+                    device.
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
@@ -621,15 +833,30 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                       style={{
                         backgroundColor: 'transparent',
                         border: '1px solid var(--border-primary)',
-                        color: hasAnthropicKey && !isLoading ? 'var(--color-error)' : 'var(--text-tertiary)',
+                        color:
+                          hasAnthropicKey && !isLoading
+                            ? 'var(--color-error)'
+                            : 'var(--text-tertiary)',
                         opacity: hasAnthropicKey && !isLoading ? 1 : 0.4,
-                        cursor: hasAnthropicKey && !isLoading ? 'pointer' : 'not-allowed'
+                        cursor: hasAnthropicKey && !isLoading ? 'pointer' : 'not-allowed',
                       }}
                       title={hasAnthropicKey ? 'Remove API key' : 'No API key to remove'}
                     >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
                         <title>Delete</title>
-                        <path d="M2 4h12M5.333 4V2.667a.667.667 0 01.667-.667h4a.667.667 0 01.667.667V4m2 0v9.333a.667.667 0 01-.667.667H4a.667.667 0 01-.667-.667V4h9.334z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path
+                          d="M2 4h12M5.333 4V2.667a.667.667 0 01.667-.667h4a.667.667 0 01.667.667V4m2 0v9.333a.667.667 0 01-.667.667H4a.667.667 0 01-.667-.667V4h9.334z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -657,15 +884,21 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                 >
                   <div className="flex items-center gap-3">
                     <Label className="mb-0">OpenAI API Key</Label>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{
-                      backgroundColor: hasOpenAIKey ? 'rgba(133, 153, 0, 0.15)' : 'rgba(128, 128, 128, 0.1)',
-                      color: hasOpenAIKey ? 'var(--color-success)' : 'var(--text-tertiary)',
-                    }}>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{
+                        backgroundColor: hasOpenAIKey
+                          ? 'rgba(133, 153, 0, 0.15)'
+                          : 'rgba(128, 128, 128, 0.1)',
+                        color: hasOpenAIKey ? 'var(--color-success)' : 'var(--text-tertiary)',
+                      }}
+                    >
                       {hasOpenAIKey ? 'Configured' : 'Not configured'}
                     </span>
                   </div>
                   <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    Required for GPT models. Your key is stored securely and never leaves your device.
+                    Required for GPT models. Your key is stored securely and never leaves your
+                    device.
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
@@ -711,15 +944,30 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                       style={{
                         backgroundColor: 'transparent',
                         border: '1px solid var(--border-primary)',
-                        color: hasOpenAIKey && !isLoading ? 'var(--color-error)' : 'var(--text-tertiary)',
+                        color:
+                          hasOpenAIKey && !isLoading
+                            ? 'var(--color-error)'
+                            : 'var(--text-tertiary)',
                         opacity: hasOpenAIKey && !isLoading ? 1 : 0.4,
-                        cursor: hasOpenAIKey && !isLoading ? 'pointer' : 'not-allowed'
+                        cursor: hasOpenAIKey && !isLoading ? 'pointer' : 'not-allowed',
                       }}
                       title={hasOpenAIKey ? 'Remove API key' : 'No API key to remove'}
                     >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
                         <title>Delete</title>
-                        <path d="M2 4h12M5.333 4V2.667a.667.667 0 01.667-.667h4a.667.667 0 01.667.667V4m2 0v9.333a.667.667 0 01-.667.667H4a.667.667 0 01-.667-.667V4h9.334z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path
+                          d="M2 4h12M5.333 4V2.667a.667.667 0 01.667-.667h4a.667.667 0 01.667.667V4m2 0v9.333a.667.667 0 01-.667.667H4a.667.667 0 01-.667-.667V4h9.334z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -738,21 +986,27 @@ export function SettingsDialog({ isOpen, onClose, onSettingsChange }: SettingsDi
                 </div>
 
                 {error && (
-                  <div className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm" style={{
-                    backgroundColor: 'rgba(220, 50, 47, 0.1)',
-                    border: '1px solid rgba(220, 50, 47, 0.3)',
-                    color: 'var(--color-error)'
-                  }}>
+                  <div
+                    className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm"
+                    style={{
+                      backgroundColor: 'rgba(220, 50, 47, 0.1)',
+                      border: '1px solid rgba(220, 50, 47, 0.3)',
+                      color: 'var(--color-error)',
+                    }}
+                  >
                     {error}
                   </div>
                 )}
 
                 {successMessage && (
-                  <div className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm" style={{
-                    backgroundColor: 'rgba(133, 153, 0, 0.1)',
-                    border: '1px solid rgba(133, 153, 0, 0.3)',
-                    color: 'var(--color-success)'
-                  }}>
+                  <div
+                    className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm"
+                    style={{
+                      backgroundColor: 'rgba(133, 153, 0, 0.1)',
+                      border: '1px solid rgba(133, 153, 0, 0.3)',
+                      color: 'var(--color-success)',
+                    }}
+                  >
                     {successMessage}
                   </div>
                 )}

@@ -122,8 +122,16 @@ rm -f apps/ui/src-tauri/Cargo.toml.bak
 TAURI_CONF="apps/ui/src-tauri/tauri.conf.json"
 jq ".version = \"$NEW_VERSION\"" "$TAURI_CONF" > "$TAURI_CONF.tmp" && mv "$TAURI_CONF.tmp" "$TAURI_CONF"
 
+# Update RELEASE_VERSION in App.tsx (used for download links in the web app)
+sed -i.bak "s/const RELEASE_VERSION = '.*'/const RELEASE_VERSION = '$NEW_VERSION'/" apps/ui/src/App.tsx
+rm -f apps/ui/src/App.tsx.bak
+
 # Update Cargo.lock
 (cd apps/ui/src-tauri && cargo update -p openscad-studio)
+
+# Re-format JSON files that jq may have reformatted
+info "Formatting modified files..."
+pnpm prettier --write package.json apps/ui/package.json "$TAURI_CONF"
 
 success "Version numbers updated"
 
@@ -181,7 +189,7 @@ success "CHANGELOG.md updated"
 
 # Commit version bump
 info "Committing version bump..."
-git add package.json apps/ui/package.json apps/ui/src-tauri/Cargo.toml apps/ui/src-tauri/Cargo.lock apps/ui/src-tauri/tauri.conf.json CHANGELOG.md
+git add package.json apps/ui/package.json apps/ui/src-tauri/Cargo.toml apps/ui/src-tauri/Cargo.lock apps/ui/src-tauri/tauri.conf.json apps/ui/src/App.tsx CHANGELOG.md
 git commit -m "chore: bump version to $NEW_VERSION"
 success "Version bump committed"
 

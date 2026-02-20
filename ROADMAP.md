@@ -1,7 +1,8 @@
-# OpenSCAD Copilot - Development Roadmap
+# OpenSCAD Studio - Development Roadmap
 
 ## Project Vision
-A modern cross-platform OpenSCAD editor with live preview and AI copilot capabilities, built with Tauri + React. The application treats OpenSCAD as a headless renderer while providing a superior editing experience with real-time feedback and AI-assisted code generation.
+
+A modern OpenSCAD editor with live preview and AI copilot capabilities, available as both a web app and a macOS desktop app. The application uses openscad-wasm for rendering and provides a superior editing experience with real-time feedback and AI-assisted code generation.
 
 ---
 
@@ -10,6 +11,7 @@ A modern cross-platform OpenSCAD editor with live preview and AI copilot capabil
 **Goal:** Establish basic end-to-end workflow with live preview
 
 ### Completed Features
+
 - ✅ **Project scaffolding**: Tauri + React monorepo with pnpm workspaces
 - ✅ **Monaco editor**: Custom OpenSCAD syntax highlighting (keywords, builtins, comments)
 - ✅ **Live preview**: PNG rendering with 300ms debounced updates
@@ -19,6 +21,7 @@ A modern cross-platform OpenSCAD editor with live preview and AI copilot capabil
 - ✅ **Cache-busted preview**: Timestamp-based image refresh to avoid browser caching
 
 ### Technical Architecture
+
 ```
 openscad-tauri/
 ├── apps/ui/                    # React + Vite + Monaco + Tailwind
@@ -34,11 +37,13 @@ openscad-tauri/
 ```
 
 ### IPC Commands Implemented
+
 - `locate_openscad`: Auto-detect or validate explicit path
 - `render_preview`: Generate PNG with `--preview --imgsize=W,H`
 - `detect_backend`: Check OpenSCAD version and Manifold support (basic)
 
 ### Key Learnings & Fixes
+
 - Fixed `--imgsize` format: OpenSCAD requires comma separator (e.g., `800,600` not `800x600`)
 - Added cache-busting query params to force browser image reload
 - Used `convertFileSrc` for Tauri asset protocol compatibility
@@ -50,6 +55,7 @@ openscad-tauri/
 **Goal:** Interactive 3D mesh viewing and optimized rendering pipeline
 
 ### ✅ Checkpoint 2.2: Interactive 3D Mesh Viewer (COMPLETED)
+
 - [x] Implement STL export path in `render_preview`
 - [x] Add Three.js STL loader (via three-stdlib)
 - [x] Build 3D viewer component with:
@@ -61,6 +67,7 @@ openscad-tauri/
 - [x] Fixed viewer dimensions to fill right panel completely
 
 ### ✅ Checkpoint 2.4: Performance Optimizations (COMPLETED)
+
 - [x] Content-hash caching (SHA-256 of source + parameters → artifact path)
 - [x] Cache hit/miss logging for debugging
 - [x] Global AppState with RenderCache instance
@@ -72,6 +79,7 @@ openscad-tauri/
 - [ ] Progress indicator for slow renders (deferred)
 
 ### ✅ Checkpoint 2.5: Export Functionality (COMPLETED)
+
 - [x] Implement `render_exact` command
 - [x] Support formats: STL, OBJ, AMF, 3MF, PNG, SVG, DXF
 - [x] Export dialog with format picker and save location
@@ -80,6 +88,7 @@ openscad-tauri/
 - [x] Styled dropdown to match dark theme
 
 ### ✅ Checkpoint 2.3: 2D SVG Mode (COMPLETED)
+
 - [x] Add SVG export path for 2D designs
 - [x] Inline SVG viewer with pan/zoom controls
 - [x] Dimension mode toggle (2D/3D) in UI
@@ -89,6 +98,7 @@ openscad-tauri/
 **Next Checkpoints:**
 
 ### Checkpoint 2.1: Settings & Configuration
+
 - [x] Settings modal implemented with theme, editor, and AI tabs
 - [x] OpenSCAD path override via settings
 - [x] Store settings in localStorage (Tauri plugin-store for API keys)
@@ -100,7 +110,10 @@ openscad-tauri/
 
 **Goal:** Cursor-like AI experience with native Rust AI agent and diff-based code editing
 
-### Architecture Overview
+> **Note:** The native Rust AI agent described in this phase was later replaced with a TypeScript implementation using Vercel AI SDK in v0.7.0. The architecture below is historical.
+
+### Architecture Overview (Historical)
+
 - **Native Rust AI Agent**: Direct Anthropic/OpenAI API integration via reqwest
 - **Security**: API keys in encrypted Tauri store (tauri-plugin-store), never touches renderer
 - **Editing**: Diff-based only (exact string replacement, max 120 lines), validated before apply
@@ -108,6 +121,7 @@ openscad-tauri/
 - **Communication**: UI ↔ Tauri IPC ↔ Rust AI Agent ↔ Claude/OpenAI API (HTTPS streaming)
 
 ### ✅ Checkpoint 3.1: Infrastructure - Native Rust AI Agent (COMPLETED)
+
 - [x] Created `src/ai_agent.rs` with native Rust AI implementation
 - [x] Created `src/cmd/ai.rs` with encrypted store commands:
   - [x] `store_api_key(provider, key)` → encrypted Tauri store
@@ -119,6 +133,7 @@ openscad-tauri/
 - [x] Implemented server-sent events (SSE) parsing for streaming responses
 
 ### ✅ Checkpoint 3.2: Tool Definitions & Execution (COMPLETED)
+
 - [x] Implemented tool definitions in `src/ai_agent.rs:get_tool_definitions()`:
   - [x] `get_current_code` - retrieve editor contents
   - [x] `get_preview_screenshot` - return preview file path
@@ -135,6 +150,7 @@ openscad-tauri/
 - [x] System prompt with OpenSCAD context and editing guidelines
 
 ### ✅ Checkpoint 3.3: Tauri IPC Integration (COMPLETED)
+
 - [x] Implemented Tauri commands in `src/ai_agent.rs`:
   - [x] `send_ai_query(messages, model, provider)` - start streaming query
   - [x] `cancel_ai_stream()` - cancel ongoing stream
@@ -148,6 +164,7 @@ openscad-tauri/
   - [x] `type: "done"` - stream completed
 
 ### ✅ Checkpoint 3.4: Frontend AI UI (COMPLETED)
+
 - [x] Created `AiPromptPanel.tsx`:
   - [x] Collapsible panel in right sidebar
   - [x] Multi-line textarea for prompts
@@ -169,6 +186,7 @@ openscad-tauri/
 - [x] Integrated into `App.tsx` layout
 
 ### ✅ Checkpoint 3.5: Streaming + Error Handling (COMPLETED)
+
 - [x] Implemented `useAiAgent` hook:
   - [x] Listen to Tauri `ai-stream` events
   - [x] Handle streaming text deltas for incremental display
@@ -185,6 +203,7 @@ openscad-tauri/
   - [x] Success/failure indicators
 
 ### ✅ Checkpoint 3.6: Polish + Testing (COMPLETED)
+
 - [x] Keyboard shortcuts:
   - [x] ⌘Enter → Submit prompt
   - [x] Cancel button for ongoing streams
@@ -206,6 +225,7 @@ openscad-tauri/
   - [x] Model selector with auto-provider detection
 
 ### ✅ Checkpoint 3.7: Checkpoint System & Undo (COMPLETED)
+
 - [x] Checkpoint-based history system:
   - [x] Automatic checkpoints created before AI edits
   - [x] Up to 50 checkpoints stored in memory
@@ -225,6 +245,7 @@ openscad-tauri/
   - [x] Event-based restoration (history:restore event)
 
 ### Success Criteria (All Met ✅)
+
 - ✅ API keys never exposed to renderer (encrypted Tauri store only)
 - ✅ All edits via exact string replacement (≤120 lines, validated)
 - ✅ Agent can "see" preview screenshots via file:// paths
@@ -239,6 +260,7 @@ openscad-tauri/
 **Completed:** October 2025 (v0.2.0)
 
 ### File Structure
+
 ```
 apps/ui/
 ├── src/
@@ -265,6 +287,7 @@ apps/ui/
 **Goal:** Cross-platform distribution and production-ready quality
 
 ### ✅ Checkpoint 4.1: Project Management (COMPLETED)
+
 - [x] Multi-tab editor with tab bar
 - [x] Open/save .scad files with native dialogs
 - [x] Recent files list on welcome screen
@@ -273,6 +296,7 @@ apps/ui/
 - [x] File path display in window title
 
 ### ✅ Checkpoint 4.2: Advanced Editor Features (MOSTLY COMPLETED)
+
 - [x] Code formatting with Tree-sitter (format on save, ⌘Shift+F)
 - [x] Autocomplete for OpenSCAD primitives, transformations, booleans
 - [x] Snippet support via Monaco snippets
@@ -281,6 +305,7 @@ apps/ui/
 - [ ] Static linting - not yet implemented
 
 ### ✅ Checkpoint 4.3: Viewer Enhancements (MOSTLY COMPLETED)
+
 - [x] Wireframe/solid toggle
 - [x] Custom camera positions (orthographic/perspective, fit to view)
 - [x] Shadow toggle for 3D viewer
@@ -300,6 +325,7 @@ apps/ui/
 - [ ] Configurable preview resolution (currently 800x600)
 
 ### Checkpoint 4.4: Cross-Platform Support & Testing
+
 - [x] macOS testing and builds (primary development platform)
 - [ ] Windows 10/11 testing and MSI builds
 - [ ] Linux (Ubuntu/Fedora) testing and AppImage/deb builds
@@ -310,6 +336,7 @@ apps/ui/
 - [ ] CI/CD pipeline (GitHub Actions) - optional
 
 ### Checkpoint 4.5: Packaging & Distribution
+
 - [x] DMG installer for macOS (v0.2.0)
 - [ ] Code signing for macOS (prevents Gatekeeper warnings)
 - [ ] MSI installer for Windows
@@ -322,29 +349,57 @@ apps/ui/
 
 ---
 
-## 🚀 Phase 5: Advanced Features (Post-MVP)
+## ✅ Phase 5: Web Version (COMPLETED)
+
+**Goal:** Run OpenSCAD Studio in the browser using openscad-wasm
+
+### Completed Features
+
+- ✅ Platform abstraction layer (PlatformBridge interface with TauriBridge and WebBridge)
+- ✅ openscad-wasm rendering via Web Worker
+- ✅ TypeScript AI agent using Vercel AI SDK (replaced Rust AI agent)
+- ✅ Web file system (File System Access API with fallbacks)
+- ✅ Browser localStorage for settings and conversations
+- ✅ In-memory undo/redo history
+- ✅ Loading screen with browser compatibility check
+- ✅ Error boundary for crash resilience
+- ✅ Cloudflare Pages deployment
+- ✅ PWA manifest and favicons
+- ✅ COOP/COEP headers for SharedArrayBuffer support
+
+**Completed:** February 2026 (v0.7.0)
+**Live at:** https://openscad-studio.pages.dev
+
+---
+
+## 🚀 Phase 6: Advanced Features (Post-MVP)
 
 ### Prompt Library
+
 - [ ] Template system for common operations
 - [ ] Community prompt sharing
 - [ ] Predefined shapes (gears, fillets, parametric objects)
 
 ### Offline Local LLM
+
 - [ ] Integrate llama.cpp as subprocess
 - [ ] Download/manage local models
 - [ ] Offline mode toggle
 
 ### Collaborative Editing
+
 - [ ] Real-time collaboration (CRDT or OT)
 - [ ] Share designs via URL
 - [ ] Comments/annotations
 
 ### Plugin System
+
 - [ ] Plugin API for custom commands
 - [ ] Community extension marketplace
 - [ ] Custom export formats
 
 ### Performance & Scale
+
 - [ ] Incremental rendering (re-render only changed parts)
 - [ ] Worker threads for rendering
 - [ ] GPU acceleration exploration
@@ -354,6 +409,7 @@ apps/ui/
 ## Design Decisions & Tradeoffs
 
 ### Key Architectural Choices
+
 1. **Headless OpenSCAD**: Invoke as CLI subprocess rather than linking as library
    - ✅ Avoids GPL licensing complications
    - ✅ Works with any OpenSCAD installation
@@ -384,6 +440,7 @@ apps/ui/
    - ⚠️ More complex build setup
 
 ### Performance Targets
+
 - **Preview latency**: < 500ms for simple shapes (cube, sphere)
 - **Editor responsiveness**: < 100ms keystroke to screen
 - **LLM response**: < 10s for typical code generation
@@ -394,16 +451,19 @@ apps/ui/
 ## Success Metrics
 
 ### Phase 1 ✅
+
 - [x] Can edit OpenSCAD code and see preview
 - [x] Errors shown in < 1s of typing
 - [x] Works on macOS with Homebrew OpenSCAD
 
 ### Phase 2 Goals
+
 - [x] STL viewer loads in < 2s
 - [x] Can toggle 3D/2D modes seamlessly
 - [x] Cache hit rate > 80% for repeated renders
 
 ### Phase 3 Goals (Met)
+
 - [x] LLM generates valid code > 90% of time
 - [x] Edit apply with validation and rollback
 - [x] Compilation failures trigger automatic rollback
@@ -411,6 +471,7 @@ apps/ui/
 - [x] Streaming provides real-time feedback
 
 ### Phase 4 Goals
+
 - [ ] Zero critical bugs in production
 - [ ] App passes macOS Gatekeeper without warnings
 - [ ] User can complete full workflow (edit → preview → export → save)
@@ -420,6 +481,7 @@ apps/ui/
 ## Known Issues & Technical Debt
 
 ### Current Limitations
+
 1. Preview resolution fixed at 800x600 (not yet configurable)
 2. Special operators (`#`, `%`, `*`, `!`) not visually distinguished
 3. OpenSCAD stderr parsing is regex-based (may miss edge cases)
@@ -427,6 +489,7 @@ apps/ui/
 5. No code signing (users see security warnings on install)
 
 ### Future Refactoring
+
 - Consider moving to structured error output if OpenSCAD adds JSON support
 - Abstract render backend (could support other CSG tools like CadQuery)
 - Add telemetry for performance monitoring (opt-in)
@@ -438,11 +501,13 @@ apps/ui/
 See individual phase checkpoints above for task breakdown. Each checkpoint should be independently verifiable and shippable.
 
 **Branching Strategy:**
+
 - `main`: Production-ready code
 - `phase-N`: Phase-level feature branches
 - `feature/checkpoint-X.Y`: Individual checkpoint branches
 
 **Commit Convention:**
+
 - ✨ `feat:` New feature
 - 🐛 `fix:` Bug fix
 - 📝 `docs:` Documentation
@@ -451,6 +516,6 @@ See individual phase checkpoints above for task breakdown. Each checkpoint shoul
 
 ---
 
-**Last Updated:** 2025-10-18
-**Current Phase:** Phase 3 Complete (AI Copilot), Phase 4 Planning
-**Next Milestone:** Production polish and distribution
+**Last Updated:** 2026-02-19
+**Current Phase:** Phase 5 Complete (Web Version), v0.7.0
+**Next Milestone:** Post-release polish and community feedback

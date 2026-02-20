@@ -8,7 +8,12 @@ interface ModelSelectorProps {
   disabled?: boolean;
 }
 
-export function ModelSelector({ currentModel, availableProviders, onChange, disabled }: ModelSelectorProps) {
+export function ModelSelector({
+  currentModel,
+  availableProviders,
+  onChange,
+  disabled,
+}: ModelSelectorProps) {
   const { groupedByProvider, isLoading, fromCache, refreshModels } = useModels(availableProviders);
 
   const { anthropic: anthropicModels, openai: openaiModels } = groupedByProvider;
@@ -45,7 +50,6 @@ export function ModelSelector({ currentModel, availableProviders, onChange, disa
             {anthropicModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.display_name}
-                {model.model_type === 'alias' ? ' *' : ''}
               </option>
             ))}
           </optgroup>
@@ -55,7 +59,6 @@ export function ModelSelector({ currentModel, availableProviders, onChange, disa
             {openaiModels.map((model) => (
               <option key={model.id} value={model.id}>
                 {model.display_name}
-                {model.model_type === 'alias' ? ' *' : ''}
               </option>
             ))}
           </optgroup>

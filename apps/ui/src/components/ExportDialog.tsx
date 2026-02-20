@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { save } from '@tauri-apps/plugin-dialog';
-import { renderExact, type ExportFormat } from '../api/tauri';
+import { getPlatform, type ExportFormat } from '../platform';
+import { RenderService, type ExportFormat as WasmExportFormat } from '../services/renderService';
 import { Button, Select, Label } from './ui';
+import { TbX } from 'react-icons/tb';
 
 interface ExportDialogProps {
   isOpen: boolean;
   onClose: () => void;
   source: string;
-  openscadPath: string;
   workingDir?: string | null;
 }
 
@@ -16,12 +16,11 @@ const FORMAT_OPTIONS: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'obj', label: 'OBJ (3D Model)', ext: 'obj' },
   { value: 'amf', label: 'AMF (3D Model)', ext: 'amf' },
   { value: '3mf', label: '3MF (3D Model)', ext: '3mf' },
-  { value: 'png', label: 'PNG (Image)', ext: 'png' },
   { value: 'svg', label: 'SVG (2D Vector)', ext: 'svg' },
   { value: 'dxf', label: 'DXF (2D CAD)', ext: 'dxf' },
 ];
 
-export function ExportDialog({ isOpen, onClose, source, openscadPath, workingDir }: ExportDialogProps) {
+export function ExportDialog({ isOpen, onClose, source }: ExportDialogProps) {
   const [format, setFormat] = useState<ExportFormat>('stl');
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -33,30 +32,17 @@ export function ExportDialog({ isOpen, onClose, source, openscadPath, workingDir
     setIsExporting(true);
 
     try {
-      const selectedFormat = FORMAT_OPTIONS.find(f => f.value === format);
+      const selectedFormat = FORMAT_OPTIONS.find((f) => f.value === format);
       if (!selectedFormat) return;
 
-      // Open save dialog
-      const savePath = await save({
-        filters: [{
-          name: selectedFormat.label,
-          extensions: [selectedFormat.ext]
-        }]
-      });
-
-      if (!savePath) {
-        // User cancelled
-        setIsExporting(false);
-        return;
-      }
-
-      // Render to file
-      await renderExact(openscadPath, {
+      const exportBytes = await RenderService.getInstance().exportModel(
         source,
-        format,
-        out_path: savePath,
-        working_dir: workingDir || undefined,
-      });
+        format as WasmExportFormat
+      );
+
+      await getPlatform().fileExport(exportBytes, `export.${selectedFormat.ext}`, [
+        { name: selectedFormat.label, extensions: [selectedFormat.ext] },
+      ]);
 
       // Success - close dialog
       onClose();
@@ -68,12 +54,46 @@ export function ExportDialog({ isOpen, onClose, source, openscadPath, workingDir
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-      <div className="rounded-lg shadow-xl p-6 w-96" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-        <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Export Model</h2>
+    <div
+      className="fixed inset-0 flex items-center justify-center z-50"
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-xl shadow-2xl w-full max-w-md mx-4 flex flex-col overflow-hidden"
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          border: '1px solid var(--border-primary)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-6 py-4 shrink-0"
+          style={{ borderBottom: '1px solid var(--border-primary)' }}
+        >
+          <h3 className="text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
+            Export Model
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center justify-center w-7 h-7 rounded-md transition-all duration-150"
+            style={{ color: 'var(--text-tertiary)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+              e.currentTarget.style.color = 'var(--text-primary)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--text-tertiary)';
+            }}
+          >
+            <TbX size={16} />
+          </button>
+        </div>
 
-        <div className="space-y-4">
-          {/* Format selection */}
+        <div className="px-6 py-5 space-y-4">
           <div>
             <Label>Export Format</Label>
             <Select
@@ -81,7 +101,7 @@ export function ExportDialog({ isOpen, onClose, source, openscadPath, workingDir
               onChange={(e) => setFormat(e.target.value as ExportFormat)}
               disabled={isExporting}
             >
-              {FORMAT_OPTIONS.map(opt => (
+              {FORMAT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
@@ -89,38 +109,31 @@ export function ExportDialog({ isOpen, onClose, source, openscadPath, workingDir
             </Select>
           </div>
 
-          {/* Error display */}
           {error && (
-            <div className="rounded p-3 text-sm" style={{
-              backgroundColor: 'rgba(220, 50, 47, 0.2)',
-              borderColor: 'var(--color-error)',
-              borderWidth: '1px',
-              borderStyle: 'solid',
-              color: 'var(--color-error)'
-            }}>
+            <div
+              className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm"
+              style={{
+                backgroundColor: 'rgba(220, 50, 47, 0.1)',
+                border: '1px solid rgba(220, 50, 47, 0.3)',
+                color: 'var(--color-error)',
+              }}
+            >
               {error}
             </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              disabled={isExporting}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="flex-1"
-            >
-              {isExporting ? 'Exporting...' : 'Export'}
-            </Button>
-          </div>
+        {/* Footer */}
+        <div
+          className="flex items-center justify-end gap-2 px-6 py-3 shrink-0"
+          style={{ borderTop: '1px solid var(--border-primary)' }}
+        >
+          <Button variant="primary" onClick={handleExport} disabled={isExporting}>
+            {isExporting ? 'Exporting...' : 'Export'}
+          </Button>
+          <Button variant="ghost" onClick={onClose} disabled={isExporting}>
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
