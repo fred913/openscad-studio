@@ -1395,13 +1395,7 @@ export function getAvailableThemes(): Array<{
   );
 
   // Define category order
-  const categoryOrder = [
-    'Dark',
-    'Light',
-    'Warm',
-    'Cool',
-    'Vibrant',
-  ];
+  const categoryOrder = ['Dark', 'Light', 'Warm', 'Cool', 'Vibrant'];
 
   return categoryOrder
     .filter((cat) => themesByCategory[cat])

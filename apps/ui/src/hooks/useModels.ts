@@ -261,7 +261,6 @@ export function useModels(availableProviders: string[]): UseModelsReturn {
       initialLoadDone.current = true;
       doFetch(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providersKey, doFetch]);
 
   const refreshModels = useCallback(() => doFetch(true), [doFetch]);

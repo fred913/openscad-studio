@@ -105,7 +105,7 @@ export function loadSettings(): Settings {
   return DEFAULT_SETTINGS;
 }
 
-let listeners: Set<() => void> = new Set();
+const listeners: Set<() => void> = new Set();
 let cachedSettings: Settings = loadSettings();
 
 function notifyListeners() {

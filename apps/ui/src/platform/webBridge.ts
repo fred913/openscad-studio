@@ -1,10 +1,4 @@
-import type {
-  PlatformBridge,
-  PlatformCapabilities,
-  FileOpenResult,
-  FileFilter,
-  ConfirmDialogOptions,
-} from './types';
+import type { PlatformBridge, PlatformCapabilities, FileOpenResult, FileFilter } from './types';
 
 // File System Access API type declarations (not yet in standard DOM lib)
 interface PickerAcceptType {
@@ -61,7 +55,7 @@ export class WebBridge implements PlatformBridge {
     this._hasDirtyState = dirty;
   }
 
-  async fileRead(_path: string): Promise<FileOpenResult | null> {
+  async fileRead(): Promise<FileOpenResult | null> {
     return null;
   }
 
@@ -205,15 +199,15 @@ export class WebBridge implements PlatformBridge {
     URL.revokeObjectURL(url);
   }
 
-  async confirm(message: string, _options?: ConfirmDialogOptions): Promise<boolean> {
+  async confirm(message: string): Promise<boolean> {
     return window.confirm(message);
   }
 
-  async ask(message: string, _options?: ConfirmDialogOptions): Promise<boolean> {
+  async ask(message: string): Promise<boolean> {
     return window.confirm(message);
   }
 
-  setWindowTitle(_title: string): void {
+  setWindowTitle(): void {
     document.title = 'OpenSCAD Studio';
   }
 

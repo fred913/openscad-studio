@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { streamText, type ModelMessage, type ToolSet, stepCountIs } from 'ai';
-import type { AiMode } from '../components/AiPromptPanel';
 import { historyService, eventBus } from '../platform';
 import {
   createModel,
@@ -245,7 +244,7 @@ export function useAiAgent() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitPrompt = useCallback(
-    async (prompt: string, _mode: AiMode) => {
+    async (prompt: string) => {
       if (import.meta.env.DEV) console.log('[useAiAgent] submitPrompt called', { prompt });
 
       const provider = getProviderFromModel(state.currentModel);
@@ -514,7 +513,7 @@ export function useAiAgent() {
     rejectDiff,
     clearError,
     newConversation,
-    loadConversation: (_id: string) => {},
+    loadConversation: () => {},
     saveConversation: async () => {},
     setCurrentModel,
     loadModelAndProviders,

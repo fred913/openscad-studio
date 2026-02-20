@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   loadSettings,
   saveSettings,
@@ -60,23 +60,12 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
   const [apiKey, setApiKey] = useState('');
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
   const [hasOpenAIKey, setHasOpenAIKey] = useState(false);
-  const [isLoading, _setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
 
-  // Load settings when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      const loadedSettings = loadSettings();
-      setSettings(loadedSettings);
-      setLocalVimConfig(loadedSettings.editor.vimConfig);
-      loadAISettings();
-      if (initialTab) setActiveSection(initialTab);
-    }
-  }, [isOpen, initialTab]);
-
-  const loadAISettings = () => {
+  const loadAISettings = useCallback(() => {
     const availableProviders = getAvailableProvidersFromStore();
     setHasAnthropicKey(availableProviders.includes('anthropic'));
     setHasOpenAIKey(availableProviders.includes('openai'));
@@ -87,7 +76,17 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
     } else {
       setApiKey('');
     }
-  };
+  }, [provider]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const loadedSettings = loadSettings();
+      setSettings(loadedSettings);
+      setLocalVimConfig(loadedSettings.editor.vimConfig);
+      loadAISettings();
+      if (initialTab) setActiveSection(initialTab);
+    }
+  }, [isOpen, initialTab, loadAISettings]);
 
   const handleAppearanceSettingChange = <K extends keyof Settings['appearance']>(
     key: K,

@@ -99,7 +99,8 @@ function printNode(node: TreeSitter.Node, options: Required<FormatOptions>): Doc
       '!',
     ].includes(type)
   ) {
-    if (import.meta.env.DEV) console.log(`[Formatter] Unknown node type: "${type}", text: "${text.substring(0, 50)}"`);
+    if (import.meta.env.DEV)
+      console.log(`[Formatter] Unknown node type: "${type}", text: "${text.substring(0, 50)}"`);
   }
 
   // Handle different node types

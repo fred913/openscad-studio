@@ -20,7 +20,7 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [isRendering, setIsRendering] = useState(false);
   const [error, setError] = useState<string>('');
-  const [dimensionMode, setDimensionMode] = useState<'2d' | '3d'>('3d');
+  const [dimensionMode] = useState<'2d' | '3d'>('3d');
 
   // Track Blob URLs for cleanup
   const prevBlobUrlRef = useRef<string>('');
@@ -42,70 +42,67 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
       });
   }, []);
 
-  const doRender = useCallback(
-    async (code: string, dimension: '2d' | '3d' = '3d') => {
-      if (import.meta.env.DEV)
-        console.log('[doRender] Starting render:', { dimension, codeLength: code.length });
+  const doRender = useCallback(async (code: string, dimension: '2d' | '3d' = '3d') => {
+    if (import.meta.env.DEV)
+      console.log('[doRender] Starting render:', { dimension, codeLength: code.length });
 
-      if (!renderServiceRef.current) {
-        setError('RenderService not available');
-        return;
-      }
+    if (!renderServiceRef.current) {
+      setError('RenderService not available');
+      return;
+    }
 
-      setIsRendering(true);
-      setError('');
+    setIsRendering(true);
+    setError('');
 
-      try {
-        const result = await renderServiceRef.current.render(code, {
-          view: dimension,
-          backend: 'manifold',
+    try {
+      const result = await renderServiceRef.current.render(code, {
+        view: dimension,
+        backend: 'manifold',
+      });
+
+      if (import.meta.env.DEV) {
+        console.log('[doRender] Render success:', {
+          kind: result.kind,
+          outputSize: result.output.length,
+          diagnostics: result.diagnostics.length,
         });
-
-        if (import.meta.env.DEV) {
-          console.log('[doRender] Render success:', {
-            kind: result.kind,
-            outputSize: result.output.length,
-            diagnostics: result.diagnostics.length,
-          });
-        }
-
-        setDiagnostics(result.diagnostics);
-        setPreviewKind(result.kind);
-
-        // Revoke previous Blob URL to prevent memory leaks
-        if (prevBlobUrlRef.current) {
-          URL.revokeObjectURL(prevBlobUrlRef.current);
-        }
-
-        if (result.output.length > 0) {
-          // Create Blob URL from output bytes
-          const mimeType = result.kind === 'mesh' ? 'application/octet-stream' : 'image/svg+xml';
-          const blob = new Blob([result.output], { type: mimeType });
-          const blobUrl = URL.createObjectURL(blob);
-          prevBlobUrlRef.current = blobUrl;
-          setPreviewSrc(blobUrl);
-        } else {
-          // No output — check for errors in diagnostics
-          const errors = result.diagnostics.filter((d) => d.severity === 'error');
-          if (errors.length > 0) {
-            setError(errors.map((e) => e.message).join('\n'));
-          } else {
-            setError('Render produced no output');
-          }
-          setPreviewSrc('');
-        }
-      } catch (err) {
-        const errorMsg = typeof err === 'string' ? err : String(err);
-        if (import.meta.env.DEV) console.log('[doRender] Render error:', errorMsg);
-        setError(errorMsg);
-        setPreviewSrc('');
-        console.error('Render error:', err);
-      } finally {
-        setIsRendering(false);
       }
-    },
-    [setDimensionMode]
-  );
+
+      setDiagnostics(result.diagnostics);
+      setPreviewKind(result.kind);
+
+      // Revoke previous Blob URL to prevent memory leaks
+      if (prevBlobUrlRef.current) {
+        URL.revokeObjectURL(prevBlobUrlRef.current);
+      }
+
+      if (result.output.length > 0) {
+        // Create Blob URL from output bytes
+        const mimeType = result.kind === 'mesh' ? 'application/octet-stream' : 'image/svg+xml';
+        const blob = new Blob([result.output], { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        prevBlobUrlRef.current = blobUrl;
+        setPreviewSrc(blobUrl);
+      } else {
+        // No output — check for errors in diagnostics
+        const errors = result.diagnostics.filter((d) => d.severity === 'error');
+        if (errors.length > 0) {
+          setError(errors.map((e) => e.message).join('\n'));
+        } else {
+          setError('Render produced no output');
+        }
+        setPreviewSrc('');
+      }
+    } catch (err) {
+      const errorMsg = typeof err === 'string' ? err : String(err);
+      if (import.meta.env.DEV) console.log('[doRender] Render error:', errorMsg);
+      setError(errorMsg);
+      setPreviewSrc('');
+      console.error('Render error:', err);
+    } finally {
+      setIsRendering(false);
+    }
+  }, []);
 
   const updateSource = useCallback((newSource: string) => {
     if (import.meta.env.DEV)

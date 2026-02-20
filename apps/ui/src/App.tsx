@@ -592,7 +592,7 @@ function App() {
       setShowWelcome(false);
       // Submit prompt after a small delay to ensure UI is ready
       setTimeout(() => {
-        submitPrompt(prompt, 'edit');
+        submitPrompt(prompt);
       }, 100);
     },
     [submitPrompt]

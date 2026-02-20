@@ -213,7 +213,10 @@ export class RenderService {
         if (event.data.type === 'ready') {
           this.worker?.removeEventListener('message', onMessage);
           resolve();
-        } else if (event.data.type === 'error' && (event.data as WorkerErrorResult).id === '__init__') {
+        } else if (
+          event.data.type === 'error' &&
+          (event.data as WorkerErrorResult).id === '__init__'
+        ) {
           this.worker?.removeEventListener('message', onMessage);
           reject(new Error((event.data as WorkerErrorResult).error));
         }
@@ -332,7 +335,11 @@ export class RenderService {
   /**
    * Export a model in a specific format.
    */
-  async exportModel(code: string, format: ExportFormat, options: { backend?: 'manifold' | 'cgal' | 'auto' } = {}): Promise<Uint8Array> {
+  async exportModel(
+    code: string,
+    format: ExportFormat,
+    options: { backend?: 'manifold' | 'cgal' | 'auto' } = {}
+  ): Promise<Uint8Array> {
     const { backend = 'manifold' } = options;
     const outputPath = `/output.${format}`;
     const args = this.buildArgs(outputPath, { backend });

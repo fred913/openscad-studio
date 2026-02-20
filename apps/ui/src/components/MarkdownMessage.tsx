@@ -264,9 +264,7 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
         },
         tr({ children, ...props }) {
           const isOddRow =
-            props.node &&
-            props.node.position &&
-            props.node.position.start.line % 2 === 1;
+            props.node && props.node.position && props.node.position.start.line % 2 === 1;
           return (
             <tr
               style={{
