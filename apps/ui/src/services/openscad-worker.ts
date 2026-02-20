@@ -13,6 +13,7 @@ export interface WorkerRenderRequest {
   id: string;
   code: string;
   args: string[];
+  auxiliaryFiles?: Record<string, string>;
 }
 
 export interface WorkerInitRequest {
@@ -63,11 +64,22 @@ function getOutputPath(args: string[]): string | null {
  * subsequent calls. The browser's WebAssembly compilation cache ensures
  * that re-instantiation is fast (~50-100ms) after the first compile.
  */
+function ensureParentDirs(fs: { mkdir(path: string): void }, filePath: string): void {
+  const parts = filePath.split('/').filter(Boolean);
+  for (let i = 1; i < parts.length; i++) {
+    const dir = '/' + parts.slice(0, i).join('/');
+    try {
+      fs.mkdir(dir);
+    } catch {
+      // Directory already exists
+    }
+  }
+}
+
 async function handleRender(request: WorkerRenderRequest): Promise<void> {
-  const { id, code, args } = request;
+  const { id, code, args, auxiliaryFiles } = request;
 
   try {
-    // Collect stderr lines for this render
     const stderrLines: string[] = [];
 
     const instance = await createOpenSCAD({
@@ -80,17 +92,29 @@ async function handleRender(request: WorkerRenderRequest): Promise<void> {
 
     const wasm = instance.getInstance();
 
-    // Write input file
-    const inputPath = '/input.scad';
+    // Write auxiliary files (e.g. included/used .scad files from working directory)
+    if (auxiliaryFiles) {
+      for (const [relativePath, content] of Object.entries(auxiliaryFiles)) {
+        const fullPath = '/input_dir/' + relativePath;
+        ensureParentDirs(wasm.FS, fullPath);
+        wasm.FS.writeFile(fullPath, content);
+      }
+    }
+
+    // Write input file inside the same directory so relative includes resolve
+    const inputPath = auxiliaryFiles ? '/input_dir/input.scad' : '/input.scad';
     wasm.FS.writeFile(inputPath, code);
 
+    // Rewrite input path in args to match where we wrote the file
+    const finalArgs = args.map((a) => (a === '/input.scad' ? inputPath : a));
+
     // Determine output path
-    const outputPath = getOutputPath(args);
+    const outputPath = getOutputPath(finalArgs);
 
     // Run OpenSCAD
     let exitCode: number;
     try {
-      exitCode = wasm.callMain(args);
+      exitCode = wasm.callMain(finalArgs);
     } catch (e) {
       // callMain throws ExitStatus on exit() — extract the exit code
       if (e && typeof e === 'object' && 'status' in e) {

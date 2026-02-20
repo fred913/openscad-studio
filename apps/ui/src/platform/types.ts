@@ -90,6 +90,15 @@ export interface PlatformBridge {
    */
   onCloseRequested(handler: () => Promise<boolean>): () => void;
 
+  // -- Directory --
+
+  /**
+   * Recursively read all .scad files in a directory.
+   * Returns a map of relative paths to file contents.
+   * Used to populate the WASM virtual filesystem for include/use resolution.
+   */
+  readDirectoryFiles(dirPath: string, extensions?: string[]): Promise<Record<string, string>>;
+
   // -- Lifecycle --
 
   /** Optional initialization (e.g., setting up native menu event forwarding) */

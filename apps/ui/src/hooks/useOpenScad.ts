@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RenderService, type Diagnostic } from '../services/renderService';
+import { getPlatform } from '../platform';
 
 export type RenderKind = 'mesh' | 'svg';
 
@@ -26,6 +27,20 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
   const prevBlobUrlRef = useRef<string>('');
 
   const renderServiceRef = useRef<RenderService>(RenderService.getInstance());
+  const auxiliaryFilesRef = useRef<Record<string, string>>({});
+
+  // Load auxiliary files from working directory for include/use resolution
+  useEffect(() => {
+    if (!options.workingDir) {
+      auxiliaryFilesRef.current = {};
+      return;
+    }
+
+    const platform = getPlatform();
+    platform.readDirectoryFiles(options.workingDir).then((files) => {
+      auxiliaryFilesRef.current = files;
+    });
+  }, [options.workingDir]);
 
   // Initialize WASM on mount
   useEffect(() => {
@@ -58,6 +73,8 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
       const result = await renderServiceRef.current.render(code, {
         view: dimension,
         backend: 'manifold',
+        auxiliaryFiles:
+          Object.keys(auxiliaryFilesRef.current).length > 0 ? auxiliaryFilesRef.current : undefined,
       });
 
       if (import.meta.env.DEV) {

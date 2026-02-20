@@ -106,6 +106,40 @@ export class TauriBridge implements PlatformBridge {
     });
   }
 
+  async readDirectoryFiles(
+    dirPath: string,
+    extensions: string[] = ['scad']
+  ): Promise<Record<string, string>> {
+    const { readDir, readTextFile } = await import('@tauri-apps/plugin-fs');
+    const files: Record<string, string> = {};
+
+    const walk = async (currentDir: string, prefix: string) => {
+      const entries = await readDir(currentDir);
+      for (const entry of entries) {
+        const entryPath = currentDir + '/' + entry.name;
+        const relativePath = prefix ? prefix + '/' + entry.name : entry.name;
+
+        if (entry.isDirectory) {
+          await walk(entryPath, relativePath);
+        } else if (extensions.some((ext) => entry.name.endsWith('.' + ext))) {
+          try {
+            files[relativePath] = await readTextFile(entryPath);
+          } catch {
+            // Skip files that can't be read
+          }
+        }
+      }
+    };
+
+    try {
+      await walk(dirPath, '');
+    } catch {
+      // Directory doesn't exist or can't be read
+    }
+
+    return files;
+  }
+
   setWindowTitle(title: string): void {
     import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
       getCurrentWindow().setTitle(title);

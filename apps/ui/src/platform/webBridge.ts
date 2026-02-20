@@ -59,6 +59,10 @@ export class WebBridge implements PlatformBridge {
     return null;
   }
 
+  async readDirectoryFiles(): Promise<Record<string, string>> {
+    return {};
+  }
+
   async fileOpen(filters?: FileFilter[]): Promise<FileOpenResult | null> {
     if (hasFileSystemAccess()) {
       return this.fileOpenNative(filters);

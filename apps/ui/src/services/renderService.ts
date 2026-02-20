@@ -21,6 +21,7 @@ export type ExportFormat = 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf';
 export interface RenderOptions {
   view?: '2d' | '3d';
   backend?: 'manifold' | 'cgal' | 'auto';
+  auxiliaryFiles?: Record<string, string>;
 }
 
 export interface RenderResult {
@@ -235,7 +236,11 @@ export class RenderService {
     return `req_${++this.idCounter}_${Date.now()}`;
   }
 
-  private async sendRequest(code: string, args: string[]): Promise<WorkerRenderResult> {
+  private async sendRequest(
+    code: string,
+    args: string[],
+    auxiliaryFiles?: Record<string, string>
+  ): Promise<WorkerRenderResult> {
     await this.init();
 
     if (!this.worker || this.disposed) {
@@ -252,6 +257,7 @@ export class RenderService {
         id,
         code,
         args,
+        auxiliaryFiles,
       };
 
       this.worker!.postMessage(request);
@@ -283,7 +289,7 @@ export class RenderService {
    * 3D mode returns STL (kind: 'mesh'), 2D mode returns SVG (kind: 'svg').
    */
   async render(code: string, options: RenderOptions = {}): Promise<RenderResult> {
-    const { view = '3d', backend = 'manifold' } = options;
+    const { view = '3d', backend = 'manifold', auxiliaryFiles } = options;
 
     // Check cache
     const cacheKey = await this.cache.generateKey(code, backend, view);
@@ -302,7 +308,7 @@ export class RenderService {
     const kind: 'mesh' | 'svg' = is3d ? 'mesh' : 'svg';
 
     const args = this.buildArgs(outputPath, { view, backend });
-    const result = await this.sendRequest(code, args);
+    const result = await this.sendRequest(code, args, auxiliaryFiles);
 
     const diagnostics = parseOpenScadStderr(result.stderr);
 
