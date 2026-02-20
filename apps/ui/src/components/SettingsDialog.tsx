@@ -20,6 +20,7 @@ import {
   getAvailableProviders as getAvailableProvidersFromStore,
 } from '../stores/apiKeyStore';
 import { getPlatform } from '../platform';
+import { applyWorkspacePreset } from '../stores/layoutStore';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -288,7 +289,67 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {activeSection === 'appearance' && (
               <div className="space-y-6">
-                {/* Theme Selector */}
+                <div>
+                  <Label>Default Layout</Label>
+                  <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
+                    Choose which panel arrangement to use as your default workspace
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { preset: 'default' as const, label: 'Editor First' },
+                      { preset: 'ai-first' as const, label: 'AI First' },
+                    ].map(({ preset, label }) => {
+                      const isActive = settings.ui.defaultLayoutPreset === preset;
+                      return (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            const updated = {
+                              ...settings,
+                              ui: { ...settings.ui, defaultLayoutPreset: preset },
+                            };
+                            setSettings(updated);
+                            saveSettings(updated);
+                            applyWorkspacePreset(preset);
+                          }}
+                          className="rounded-md p-3 text-left transition-all duration-150"
+                          style={{
+                            backgroundColor: 'var(--bg-primary)',
+                            border: isActive
+                              ? '2px solid var(--accent-primary)'
+                              : '1px solid var(--border-primary)',
+                            padding: isActive ? 'calc(0.75rem - 1px)' : undefined,
+                            boxShadow: isActive ? '0 0 0 1px var(--accent-primary)' : undefined,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.transform = 'translateY(-1px)';
+                              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive) {
+                              e.currentTarget.style.transform = 'none';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }
+                          }}
+                        >
+                          <span
+                            className="text-sm"
+                            style={{
+                              color: 'var(--text-primary)',
+                              fontWeight: isActive ? 600 : 400,
+                            }}
+                          >
+                            {label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div>
                   <Label>Theme</Label>
                   <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>

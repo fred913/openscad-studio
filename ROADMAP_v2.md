@@ -1,8 +1,8 @@
 # OpenSCAD Studio — Feature Roadmap v2
 
-> Current version: **v0.4.0** (Phases 1–3 complete, Phase 4 partially complete)
+> Current version: **v0.7.0** (Phases 1–3 complete, Phase 4 partially complete, Phase 9 web version complete)
 >
-> This roadmap replaces the Phase 5+ sections of the original ROADMAP.md. Phases 1–3 are historical and remain unchanged. Phase 4 is partially complete. Everything below represents the forward-looking plan based on a full codebase review.
+> This roadmap replaces the Phase 5+ sections of the original ROADMAP.md. Phases 1–3 are historical and remain unchanged. Phase 4 is partially complete. Phase 9 (web version) is complete. Everything below represents the forward-looking plan based on a full codebase review.
 
 ---
 
@@ -19,53 +19,49 @@
 
 **Goal:** Ship the changes with the highest impact-to-effort ratio. These are all independently shippable and can be merged in any order.
 
-### 4A.1: Toast Notification System
-- [ ] Add a toast library (`sonner` or `react-hot-toast`)
-- [ ] Replace all `alert()` calls with non-blocking toasts:
-  - `App.tsx`: file open/save/export errors (lines 435, 589, 748)
-  - `AiPromptPanel.tsx`: checkpoint restore error (line 175)
-- [ ] Replace `confirm()` with Tauri native dialogs (already partially done) or styled modal
-- [ ] Categorize toasts: `success` (green), `error` (red), `info` (neutral)
-- [ ] Auto-dismiss success toasts after 3s; errors persist until dismissed
+### ✅ 4A.1: Toast Notification System
 
-### 4A.2: Markdown Rendering in AI Chat
-- [ ] Add `react-markdown` + `remark-gfm` + `react-syntax-highlighter`
-- [ ] Render assistant messages as markdown instead of `whitespace-pre-wrap font-mono`
-- [ ] OpenSCAD code blocks get syntax highlighting
-- [ ] Inline code, bold, lists, headers all render properly
-- [ ] Keep user messages as plain text (they're prompts, not prose)
+- [x] Add a toast library (`sonner` or `react-hot-toast`)
+- [x] Replace all `alert()` calls with non-blocking toasts
+- [x] Replace `confirm()` with styled dialogs
+- [x] Categorize toasts: `success` (green), `error` (red), `info` (neutral)
+- [x] Auto-dismiss success toasts after 3s; errors persist until dismissed
 
-### 4A.3: Auto-Render on Idle
-- [ ] Add debounced auto-render (500ms after last keystroke) as a setting
-- [ ] Default: **off** (preserves current explicit-render behavior)
-- [ ] Setting toggle in `SettingsDialog.tsx` → Editor tab
-- [ ] When enabled: `useOpenScad` watches source changes, debounces, calls `doRender`
-- [ ] Cancel in-flight render if source changes before completion
-- [ ] Visual indicator: subtle "auto-rendering..." badge (reuse existing rendering spinner)
+### ✅ 4A.2: Markdown Rendering in AI Chat
 
-### 4A.4: Strip Debug Logging
-- [ ] Remove or gate behind `import.meta.env.DEV` all `console.log` statements in:
-  - `useAiAgent.ts` (~30 log statements)
-  - `AiPromptPanel.tsx` (~10 log statements)
-  - `useOpenScad.ts` (~8 log statements)
-  - `App.tsx` (~6 log statements)
-  - `Editor.tsx` (~4 log statements)
-- [ ] Keep `console.error` and `console.warn` for genuine error paths
+- [x] Add `react-markdown` + `remark-gfm` + `react-syntax-highlighter`
+- [x] Render assistant messages as markdown instead of `whitespace-pre-wrap font-mono`
+- [x] OpenSCAD code blocks get syntax highlighting
+- [x] Inline code, bold, lists, headers all render properly
+- [x] Keep user messages as plain text (they're prompts, not prose)
 
-### 4A.5: Smart Welcome Screen
-- [ ] Check `has_api_key` on mount
-- [ ] If no API key: hide the AI prompt textarea, show a setup CTA instead ("Set up AI to get started" → opens Settings → AI tab)
-- [ ] Keep example prompts visible but disabled, with tooltip: "Configure an API key in Settings to use AI"
-- [ ] Always show "Open File" and "Start with empty project" prominently
-- [ ] Show recent files regardless of API key status
+### ✅ 4A.3: Auto-Render on Idle
 
-### 4A.6: ECHO Output in Console
-- [ ] Currently, ECHO messages are filtered out of diagnostics in `PanelComponents.tsx` (line 19: `diagnostics.filter(d => !d.message.match(/^ECHO:/i))`)
-- [ ] Create a separate "Output" section in `DiagnosticsPanel` for ECHO messages
-- [ ] Display ECHO messages with a distinct icon/color (not error red)
-- [ ] Preserve chronological order
+- [x] Add debounced auto-render (500ms after last keystroke) as a setting
+- [x] Default: **off** (preserves current explicit-render behavior)
+- [x] Setting toggle in `SettingsDialog.tsx` → Editor tab
+- [x] When enabled: `useOpenScad` watches source changes, debounces, calls `doRender`
+- [x] Cancel in-flight render if source changes before completion
 
-**Success criteria:** App feels polished. No more browser `alert()` popups. AI chat looks professional. Debugging output is clean.
+### ✅ 4A.4: Strip Debug Logging
+
+- [x] Remove or gate behind `import.meta.env.DEV` all `console.log` statements
+- [x] Keep `console.error` and `console.warn` for genuine error paths
+
+### ✅ 4A.5: Smart Welcome Screen
+
+- [x] Check `has_api_key` on mount
+- [x] If no API key: show setup CTA instead
+- [x] Always show "Open File" and "Start with empty project" prominently
+- [x] Show recent files regardless of API key status
+
+### ✅ 4A.6: ECHO Output in Console
+
+- [x] Create a separate "Output" section in `DiagnosticsPanel` for ECHO messages
+- [x] Display ECHO messages with a distinct icon/color (not error red)
+- [x] Preserve chronological order
+
+**Success criteria:** ✅ App feels polished. No more browser `alert()` popups. AI chat looks professional. Debugging output is clean.
 
 ---
 
@@ -74,6 +70,7 @@
 **Goal:** Reduce structural debt so subsequent features don't fight the codebase. No user-visible changes.
 
 ### 4B.1: Decompose App.tsx (1189 lines → <300)
+
 - [ ] Extract `useFileManager` hook:
   - `saveFile`, `checkUnsavedChanges`, `handleOpenFile`, `handleOpenRecent`
   - File dialog interactions, unsaved changes prompts
@@ -89,6 +86,7 @@
 - [ ] Eliminate the 7+ refs-as-state pattern by moving state to hooks
 
 ### 4B.2: React Error Boundaries
+
 - [ ] Create `<PanelErrorBoundary>` component
 - [ ] Wrap each dockview panel (Editor, Preview, AI Chat, Console, Customizer, Diff) in a boundary
 - [ ] Error boundary shows: "This panel encountered an error" + "Reload Panel" button
@@ -96,6 +94,7 @@
 - [ ] Log errors to `console.error` with component stack
 
 ### 4B.3: Centralized State Management
+
 - [ ] Evaluate whether `zustand` or a context-based approach would reduce the ref-heavy patterns
 - [ ] At minimum: create a `useEditorState` zustand store for the source/diagnostics/preview state that both `useOpenScad` and `useAiAgent` share
 - [ ] Eliminate the `EditorState` duplication between frontend React state and backend Rust `EditorState`
@@ -103,6 +102,7 @@
   - Backend should be the source of truth; frontend reads via events
 
 ### 4B.4: Platform Abstraction (Phase 1 from ARCHITECTURE.md)
+
 - [ ] Create `packages/platform/` package with `Platform` interface (types only)
 - [ ] Create `TauriPlatform` implementation wrapping existing `api/tauri.ts` + `invoke` calls
 - [ ] Wire up `PlatformProvider` in `main.tsx`
@@ -120,6 +120,7 @@
 **Goal:** Make the AI copilot competitive with Cursor/Copilot-level UX. This is the app's differentiator.
 
 ### 5.1: Conversation History Sidebar
+
 - [ ] Add "Conversations" as a dockview panel option (alongside Editor, Preview, AI, Console)
 - [ ] List saved conversations with title, date, message count
 - [ ] Click to load a conversation
@@ -129,6 +130,7 @@
 - [ ] Frontend just needs the UI — `loadConversation` already exists in `useAiAgent`
 
 ### 5.2: Image Input for AI
+
 - [ ] Add image paste/drag-drop support to the AI prompt textarea
 - [ ] Support: clipboard paste, file drag-drop, file picker button
 - [ ] Convert images to base64 for API transmission
@@ -138,6 +140,7 @@
 - [ ] Backend change: extend `send_ai_query` message format to support image content blocks
 
 ### 5.3: Multi-File Project Context for AI
+
 - [ ] Parse `use`/`include` statements from current file
 - [ ] Resolve referenced files relative to `working_dir`
 - [ ] Read referenced file contents
@@ -153,6 +156,7 @@
 - [ ] Limit context to files actually referenced (don't dump entire directories)
 
 ### 5.4: AI Prompt Templates
+
 - [ ] Create a prompt template system with categories:
   - **Generate**: "Create a parametric enclosure", "Design a gear with N teeth"
   - **Fix**: "Fix compilation errors", "Optimize for 3D printing"
@@ -163,6 +167,7 @@
 - [ ] Store templates as JSON in app resources (not user-editable initially)
 
 ### 5.5: Configurable Edit Size Limit
+
 - [ ] Move the 120-line edit limit from hardcoded to a setting
 - [ ] Default: 120 lines (current behavior)
 - [ ] Allow increase to 250 or 500 for users who want full-file generation
@@ -178,6 +183,7 @@
 **Goal:** Make the 3D viewer competitive with dedicated CAD preview tools.
 
 ### 6.1: Adaptive Render Resolution
+
 - [ ] Replace hardcoded 800x600 with actual panel dimensions
 - [ ] Use `ResizeObserver` on the preview panel to track size
 - [ ] Pass dynamic `{ w, h }` to `renderPreview`
@@ -185,6 +191,7 @@
 - [ ] Debounce resize-triggered re-renders (300ms)
 
 ### 6.2: Section/Clipping Plane
+
 - [ ] Add a toggle button to the 3D viewer toolbar: "Section Plane"
 - [ ] When enabled: render a draggable clipping plane using `THREE.Plane`
 - [ ] Controls: drag to move plane position, rotate to change orientation
@@ -192,6 +199,7 @@
 - [ ] Three.js `clippingPlanes` on material is the standard approach
 
 ### 6.3: Color Support from OpenSCAD
+
 - [ ] Parse `color()` calls from OpenSCAD source code
 - [ ] When rendering STL: OpenSCAD doesn't embed colors, so this requires either:
   - Option A: Use AMF/3MF format (supports colors) for preview instead of STL
@@ -200,6 +208,7 @@
 - [ ] Minimum viable: single-color override from first `color()` call in source
 
 ### 6.4: Measurement Tools
+
 - [ ] Point-to-point distance measurement:
   - Click two points on the mesh surface
   - Display distance with a line and label
@@ -210,6 +219,7 @@
 - [ ] Three.js raycasting for point picking
 
 ### 6.5: Special Operator Preview
+
 - [ ] Support OpenSCAD debug operators: `#` (highlight), `%` (transparent), `*` (disable), `!` (show only)
 - [ ] This requires parsing the source for operators and communicating them to the renderer
 - [ ] `#` highlighted objects: render with a distinct color/transparency
@@ -225,6 +235,7 @@
 **Goal:** Make the code editor smarter than stock OpenSCAD.
 
 ### 7.1: Static Linting
+
 - [ ] Implement basic linting rules (no external process needed):
   - Undefined variable references
   - Unused variable warnings
@@ -235,6 +246,7 @@
 - [ ] Linting runs on idle (debounced), not on every keystroke
 
 ### 7.2: Go-to-Definition
+
 - [ ] `Cmd+Click` / `F12` on module/function names jumps to definition
 - [ ] Works within the current file
 - [ ] Works across `use`/`include` files (resolve to file, open in new tab)
@@ -242,6 +254,7 @@
 - [ ] Register as Monaco `DefinitionProvider`
 
 ### 7.3: Hover Documentation
+
 - [ ] Hover over built-in functions (`cube`, `sphere`, `translate`, etc.) shows documentation
 - [ ] Include: signature, parameter descriptions, example
 - [ ] Source: embed OpenSCAD cheat sheet data as JSON
@@ -249,6 +262,7 @@
 - [ ] Register as Monaco `HoverProvider`
 
 ### 7.4: Improved Autocomplete
+
 - [ ] Context-aware completions:
   - Inside `translate([...])` → suggest coordinate patterns
   - After `$fn =` → suggest common values (32, 64, 128)
@@ -267,6 +281,7 @@
 **Goal:** Ship to real users on all platforms.
 
 ### 8.1: Windows Support
+
 - [ ] Test OpenSCAD detection on Windows (`where openscad`, common install paths)
 - [ ] Fix path handling (backslashes, drive letters)
 - [ ] Verify keyboard shortcuts (Ctrl vs ⌘)
@@ -275,6 +290,7 @@
 - [ ] Test on Windows 10 and 11
 
 ### 8.2: Linux Support
+
 - [ ] Test OpenSCAD detection on Linux (`which openscad`, package manager paths)
 - [ ] AppImage build
 - [ ] .deb package for Ubuntu/Debian
@@ -282,12 +298,14 @@
 - [ ] Verify file dialogs work with various desktop environments
 
 ### 8.3: Auto-Update
+
 - [ ] Enable Tauri's built-in updater plugin
 - [ ] Set up update server (GitHub Releases as update source)
 - [ ] In-app update notification: "A new version is available" with changelog
 - [ ] One-click update + restart
 
 ### 8.4: CI/CD Pipeline
+
 - [ ] GitHub Actions workflow:
   - Build on macOS, Windows, Linux
   - Run TypeScript type checking
@@ -297,6 +315,7 @@
 - [ ] Upload artifacts to GitHub Releases
 
 ### 8.5: E2E Test Suite
+
 - [ ] Set up Playwright or WebdriverIO for Tauri app testing
 - [ ] Critical path tests:
   - Open app → editor visible → type code → preview renders
@@ -310,39 +329,47 @@
 
 ---
 
-## Phase 9: Web Version (~3 weeks)
+## ✅ Phase 9: Web Version (COMPLETED)
 
 **Goal:** Run OpenSCAD Studio in the browser with openscad-wasm. Full spec in `ARCHITECTURE.md`.
 
-### 9.1: Web Platform Implementation
-- [ ] Create `WebPlatform` implementing the `Platform` interface
-- [ ] `WebRenderingService`: openscad-wasm in a Web Worker
-- [ ] Port `parseOpenScadStderr()` from Rust to TypeScript
-- [ ] `WebFileSystemService`: File System Access API + fallbacks
-- [ ] `WebStorageService`: localStorage
-- [ ] `WebConversationService`: IndexedDB
-- [ ] `WebHistoryService`: in-memory undo/redo
+### ✅ 9.1: Web Platform Implementation
 
-### 9.2: Web AI Agent
-- [ ] Direct `fetch()` to Anthropic API with SSE parsing (CORS supported)
-- [ ] In-browser tool execution (calls `WebRenderingService` for compile)
-- [ ] API key stored in localStorage with security warning
-- [ ] Anthropic-only initially (OpenAI needs CORS proxy)
+- [x] Create `WebBridge` implementing the `PlatformBridge` interface
+- [x] openscad-wasm rendering in a Web Worker
+- [x] Port `parseOpenScadStderr()` from Rust to TypeScript
+- [x] `WebFileSystemService`: File System Access API + fallbacks
+- [x] `WebStorageService`: localStorage
+- [x] `WebConversationService`: localStorage
+- [x] `WebHistoryService`: in-memory undo/redo
 
-### 9.3: Web-Specific UI
-- [ ] In-app menu bar (no native menus in browser)
-- [ ] Skip `OpenScadSetupScreen` (WASM is always available)
-- [ ] Export = browser download instead of file save dialog
-- [ ] Tab title shows filename via `document.title`
-- [ ] `beforeunload` handler for unsaved changes
+### ✅ 9.2: Web AI Agent
 
-### 9.4: Build & Deploy
-- [ ] Vite dual-target config (`VITE_PLATFORM=web`)
-- [ ] `pnpm dev:web` and `pnpm build:web` scripts
-- [ ] Deploy to GitHub Pages or Vercel
-- [ ] Loading screen while openscad-wasm downloads (~3-4MB compressed)
+- [x] AI agent using Vercel AI SDK with streaming support
+- [x] In-browser tool execution
+- [x] API key stored in localStorage with security warning
+- [x] Both Anthropic and OpenAI supported
 
-**Success criteria:** Full workflow works in Chrome: edit → preview → export → AI chat. Desktop has zero regressions.
+### ✅ 9.3: Web-Specific UI
+
+- [x] Skip `OpenScadSetupScreen` (WASM is always available)
+- [x] Export = browser download instead of file save dialog
+- [x] Tab title shows "OpenSCAD Studio" via `document.title`
+- [x] `beforeunload` handler for unsaved changes
+- [x] Error boundary for crash recovery
+- [x] Loading screen with browser compatibility check
+
+### ✅ 9.4: Build & Deploy
+
+- [x] Separate `apps/web/` entry point with Vite config
+- [x] `pnpm web:dev` and `pnpm web:build` scripts
+- [x] Deploy to Cloudflare Pages at openscad-studio.pages.dev
+- [x] Loading screen while openscad-wasm downloads (~3-4MB compressed)
+- [x] COOP/COEP headers for SharedArrayBuffer support
+- [x] PWA manifest and favicons
+
+**Completed:** February 2026 (v0.7.0)
+**Success criteria:** ✅ Full workflow works in Chrome: edit → preview → export → AI chat. Desktop has zero regressions.
 
 ---
 
@@ -351,28 +378,33 @@
 These are valuable but not blocking a production release. Prioritize based on user feedback.
 
 ### Community & Sharing
+
 - [ ] Share designs via URL (encode source as URL parameter or pastebin-style)
 - [ ] Gallery of example designs with one-click open
 - [ ] Community prompt library (submit/upvote prompt templates)
 
 ### Offline LLM
+
 - [ ] Integrate llama.cpp as Tauri sidecar
 - [ ] Model download/management UI
 - [ ] Offline mode toggle (no network required)
 - [ ] Fine-tuned model on OpenSCAD code corpus
 
 ### Plugin System
+
 - [ ] Plugin API for custom tools, exporters, and UI panels
 - [ ] Plugin manifest format and loader
 - [ ] Community plugin registry
 
 ### Performance
+
 - [ ] Incremental rendering (re-render only changed subtree)
 - [ ] Background render thread pool
 - [ ] GPU-accelerated preview (consider WebGPU for web)
 - [ ] Render progress indicator for complex models (>5s)
 
 ### Collaboration
+
 - [ ] Real-time collaborative editing (CRDT via Yjs)
 - [ ] Shareable project URLs
 - [ ] Comments/annotations on 3D model
@@ -383,14 +415,14 @@ These are valuable but not blocking a production release. Prioritize based on us
 
 Items to address opportunistically, not as dedicated phases:
 
-| Issue | Location | Severity | Notes |
-|-------|----------|----------|-------|
-| Refs-as-state anti-pattern | `App.tsx` (7+ refs) | Medium | Address in 4B.1 decomposition |
-| Settings split across localStorage and Tauri store | `settingsStore.ts`, `cmd/ai.rs` | Low | Consider unifying in platform abstraction |
-| OpenSCAD stderr parsing is regex-based | `utils/parser.rs` | Low | Works but may miss edge cases. Revisit if OpenSCAD adds JSON output |
-| `EditorState` duplicated between frontend and backend | `useOpenScad.ts`, `ai_agent.rs` | Medium | Backend should be source of truth (4B.3) |
-| No graceful degradation when OpenSCAD is unavailable | Various | Low | Editor works, just no preview. Could be clearer about what's disabled |
-| `DiffViewer` panel always shows same code for old/new | `PanelComponents.tsx:58-66` | Low | `oldCode={source} newCode={source}` — not actually showing a diff |
+| Issue                                                 | Location                        | Severity | Notes                                                                 |
+| ----------------------------------------------------- | ------------------------------- | -------- | --------------------------------------------------------------------- |
+| Refs-as-state anti-pattern                            | `App.tsx` (7+ refs)             | Medium   | Address in 4B.1 decomposition                                         |
+| Settings split across localStorage and Tauri store    | `settingsStore.ts`, `cmd/ai.rs` | Low      | Consider unifying in platform abstraction                             |
+| OpenSCAD stderr parsing is regex-based                | `utils/parser.rs`               | Low      | Works but may miss edge cases. Revisit if OpenSCAD adds JSON output   |
+| `EditorState` duplicated between frontend and backend | `useOpenScad.ts`, `ai_agent.rs` | Medium   | Backend should be source of truth (4B.3)                              |
+| No graceful degradation when OpenSCAD is unavailable  | Various                         | Low      | Editor works, just no preview. Could be clearer about what's disabled |
+| `DiffViewer` panel always shows same code for old/new | `PanelComponents.tsx:58-66`     | Low      | `oldCode={source} newCode={source}` — not actually showing a diff     |
 
 ---
 
@@ -410,6 +442,6 @@ Decisions made during roadmap planning that affect ordering:
 
 ---
 
-**Last Updated:** 2026-02-17
-**Current Phase:** 4A Planning
-**Next Milestone:** Quick wins & polish release
+**Last Updated:** 2026-02-19
+**Current Phase:** v0.7.0 — Web version shipped
+**Next Milestone:** Phase 4B or Phase 5 based on user feedback

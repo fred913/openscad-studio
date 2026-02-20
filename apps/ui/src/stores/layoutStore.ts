@@ -2,7 +2,7 @@ import type { DockviewApi, SerializedDockview } from 'dockview';
 
 const LAYOUT_STORAGE_KEY = 'openscad-studio-layout';
 
-export type WorkspacePreset = 'default' | 'wide-editor' | 'wide-preview' | 'minimal';
+export type WorkspacePreset = 'default' | 'ai-first' | 'wide-editor' | 'wide-preview' | 'minimal';
 
 let dockviewApi: DockviewApi | null = null;
 
@@ -23,11 +23,27 @@ export function lockEditorGroup(api: DockviewApi) {
   }
 }
 
-function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
+export function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
   switch (preset) {
     case 'default': {
-      // Top row: Editor (left) | Preview + Customizer (right) — 70% height
       api.addPanel({ id: 'editor', component: 'editor', title: 'Editor' });
+      api.addPanel({
+        id: 'ai-chat',
+        component: 'ai-chat',
+        title: 'AI',
+        position: { referencePanel: 'editor', direction: 'below' },
+        initialHeight: 350,
+      });
+      const aiGroup = api.getPanel('ai-chat');
+      if (aiGroup) {
+        api.addPanel({
+          id: 'console',
+          component: 'console',
+          title: 'Console',
+          position: { referenceGroup: aiGroup.group.id },
+          inactive: true,
+        });
+      }
       api.addPanel({
         id: 'preview',
         component: 'preview',
@@ -44,23 +60,43 @@ function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
           inactive: true,
         });
       }
-      // Bottom row: Console + AI — spans full width, ~30% height
+      break;
+    }
+    case 'ai-first': {
+      api.addPanel({ id: 'ai-chat', component: 'ai-chat', title: 'AI' });
+      const aiPanel = api.getPanel('ai-chat');
+      if (aiPanel) {
+        api.addPanel({
+          id: 'editor',
+          component: 'editor',
+          title: 'Editor',
+          position: { referenceGroup: aiPanel.group.id },
+          inactive: true,
+        });
+      }
+      api.addPanel({
+        id: 'preview',
+        component: 'preview',
+        title: 'Preview',
+        position: { referencePanel: 'ai-chat', direction: 'right' },
+      });
+      const aiFpPreview = api.getPanel('preview');
+      if (aiFpPreview) {
+        api.addPanel({
+          id: 'customizer',
+          component: 'customizer',
+          title: 'Customizer',
+          position: { referenceGroup: aiFpPreview.group.id },
+          inactive: true,
+        });
+      }
       api.addPanel({
         id: 'console',
         component: 'console',
         title: 'Console',
-        position: { direction: 'below' },
+        position: { referencePanel: 'preview', direction: 'below' },
         initialHeight: 250,
       });
-      const consolePanel = api.getPanel('console');
-      if (consolePanel) {
-        api.addPanel({
-          id: 'ai-chat',
-          component: 'ai-chat',
-          title: 'AI',
-          position: { referenceGroup: consolePanel.group.id },
-        });
-      }
       break;
     }
     case 'wide-editor': {
@@ -147,7 +183,9 @@ function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
     }
   }
 
-  lockEditorGroup(api);
+  if (preset !== 'ai-first') {
+    lockEditorGroup(api);
+  }
 }
 
 export function applyDefaultLayout(api: DockviewApi): void {

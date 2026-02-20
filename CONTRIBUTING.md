@@ -6,34 +6,26 @@ Thank you for your interest in contributing to OpenSCAD Studio! This document pr
 
 ### Prerequisites
 
-1. **OpenSCAD** (required for testing)
-   ```bash
-   # macOS
-   brew install openscad
+**Development Tools:**
 
-   # Ubuntu/Debian
-   sudo apt install openscad
-
-   # Windows
-   # Download from https://openscad.org/
-   ```
-
-2. **Development Tools**
-   - Node.js 18+ and pnpm
-   - Rust toolchain (1.82+)
-   - Git
+- Node.js 18+ and pnpm
+- Rust toolchain 1.82+ (only needed for desktop development)
+- Git
 
 ### Initial Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/openscad-studio.git
+git clone https://github.com/zacharyfmarion/openscad-studio.git
 cd openscad-studio
 
 # Install dependencies
 pnpm install
 
-# Run in development mode
+# Run web version in development mode
+pnpm web:dev
+
+# Run desktop version in development mode (requires Rust)
 pnpm tauri:dev
 ```
 
@@ -48,6 +40,7 @@ pnpm tauri:dev
 ### Making Changes
 
 1. **Create a new branch** from `main`:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -55,6 +48,7 @@ pnpm tauri:dev
 2. **Make your changes** following our code style guidelines
 
 3. **Test your changes**:
+
    ```bash
    # Type check
    pnpm type-check
@@ -62,14 +56,18 @@ pnpm tauri:dev
    # Lint
    pnpm lint
 
-   # Build
-   pnpm build
+   # Build (web)
+   pnpm web:build
 
-   # Run app
+   # Run web app
+   pnpm web:dev
+
+   # Run desktop app (requires Rust)
    pnpm tauri:dev
    ```
 
 4. **Commit your changes** using conventional commits:
+
    ```bash
    git commit -m "feat: add new feature"
    ```
@@ -90,6 +88,7 @@ pnpm tauri:dev
 - Extract complex logic into custom hooks
 
 **Example:**
+
 ```typescript
 // Good
 export function MyComponent({ value }: { value: string }) {
@@ -106,23 +105,12 @@ export function MyComponent({ value }: { value: string }) {
 class MyComponent extends React.Component { ... }
 ```
 
-### Rust
+### Rust (Desktop Only)
 
 - Follow `rustfmt` defaults
 - Use `Result<T, E>` for error handling
 - Document public APIs with doc comments
 - Prefer `async` functions for I/O operations
-
-**Example:**
-```rust
-/// Renders OpenSCAD code and returns the output path
-pub async fn render_preview(
-    source: &str,
-    openscad_path: &str,
-) -> Result<String, RenderError> {
-    // Implementation
-}
-```
 
 ## 📋 Commit Message Convention
 
@@ -138,6 +126,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 - 🔧 `chore:` Build process or tooling changes
 
 **Examples:**
+
 ```bash
 feat: add 2D SVG preview mode
 fix: resolve Monaco editor line number sync issue
@@ -171,13 +160,13 @@ Currently, the project uses manual testing. When contributing:
 ```
 openscad-studio/
 ├── apps/
-│   └── ui/                      # React frontend + Tauri backend
-│       ├── src/                 # React components, hooks, etc.
-│       └── src-tauri/           # Rust backend code (including AI agent)
+│   ├── ui/                      # Shared React frontend + Tauri desktop backend
+│   │   ├── src/                 # React components, hooks, platform bridge, services
+│   │   └── src-tauri/           # Rust backend code (desktop only)
+│   └── web/                     # Web app entry point (Vite)
 ├── packages/
 │   └── shared/                  # Shared TypeScript types
 ├── CLAUDE.md                    # AI assistant guide
-├── AGENTS.md                    # AI agent architecture
 └── ROADMAP.md                   # Development roadmap
 ```
 
@@ -250,11 +239,12 @@ Violations may result in temporary or permanent ban from the project. Report vio
 
 ## ⚖️ License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the GNU General Public License v2.0 (GPL-2.0).
 
 ## 🎉 Recognition
 
 Contributors will be recognized in:
+
 - GitHub contributors page
 - Release notes (for significant contributions)
 - Future CONTRIBUTORS.md file

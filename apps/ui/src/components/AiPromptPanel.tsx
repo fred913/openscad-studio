@@ -6,6 +6,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { ModelSelector } from './ModelSelector';
 import { useHistory } from '../hooks/useHistory';
 import { getPlatform } from '../platform';
+import { useHasApiKey } from '../stores/apiKeyStore';
 
 function getImageDataUrlFromResult(result: unknown): string | null {
   if (!result) return null;
@@ -41,6 +42,7 @@ interface AiPromptPanelProps {
   availableProviders?: string[];
   onModelChange?: (model: string) => void;
   onRestoreCheckpoint?: (checkpointId: string, truncatedMessages: Message[]) => void;
+  onOpenSettings?: () => void;
 }
 
 export interface AiPromptPanelRef {
@@ -61,9 +63,11 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
       availableProviders = [],
       onModelChange,
       onRestoreCheckpoint,
+      onOpenSettings,
     },
     ref
   ) => {
+    const hasApiKey = useHasApiKey();
     const [prompt, setPrompt] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const responseRef = useRef<HTMLDivElement>(null);
@@ -149,6 +153,34 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
         textareaRef.current.focus();
       }
     }, [isStreaming]);
+
+    if (!hasApiKey) {
+      return (
+        <div
+          className="h-full flex items-center justify-center px-6"
+          style={{ backgroundColor: 'var(--bg-primary)' }}
+        >
+          <div className="text-center max-w-xs">
+            <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
+              Add an API key to get started
+            </p>
+            <button
+              type="button"
+              onClick={() => onOpenSettings?.()}
+              className="text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              style={{
+                backgroundColor: 'var(--accent-primary)',
+                color: 'var(--text-inverse)',
+                cursor: 'pointer',
+                border: 'none',
+              }}
+            >
+              Open Settings
+            </button>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>

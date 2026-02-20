@@ -14,6 +14,7 @@ interface WelcomeScreenProps {
   onOpenRecent: (path: string) => void;
   onOpenFile?: () => void;
   onOpenSettings?: () => void;
+  showRecentFiles?: boolean;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -32,6 +33,7 @@ export function WelcomeScreen({
   onOpenRecent,
   onOpenFile,
   onOpenSettings,
+  showRecentFiles = true,
 }: WelcomeScreenProps) {
   const [prompt, setPrompt] = useState('');
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
@@ -152,8 +154,8 @@ export function WelcomeScreen({
                 style={{ color: 'var(--accent-primary)' }}
               >
                 Open Settings
-              </a>
-              {' '}to configure (⌘,)
+              </a>{' '}
+              to configure (⌘,)
             </p>
           </div>
         ) : null}
@@ -185,8 +187,7 @@ export function WelcomeScreen({
           </div>
         </div>
 
-        {/* Recent files */}
-        {recentFiles.length > 0 && (
+        {showRecentFiles && recentFiles.length > 0 && (
           <div className="space-y-3 pt-4">
             <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
               Recent files:

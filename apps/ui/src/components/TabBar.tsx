@@ -187,7 +187,6 @@ export function TabBar({
         className="flex items-stretch overflow-x-auto"
         style={{
           backgroundColor: 'var(--bg-secondary)',
-          borderBottom: '1px solid var(--border-subtle)',
         }}
       >
         <SortableContext items={tabs.map((t) => t.id)} strategy={horizontalListSortingStrategy}>

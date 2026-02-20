@@ -50,6 +50,7 @@ export interface WorkspaceState {
 
   onAcceptDiff: () => void;
   onRejectDiff: () => void;
+  onOpenAiSettings: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceState | null>(null);

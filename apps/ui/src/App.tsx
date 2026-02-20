@@ -6,8 +6,10 @@ import { ExportDialog } from './components/ExportDialog';
 import type { AiPromptPanelRef } from './components/AiPromptPanel';
 import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
 import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen';
+import { NuxLayoutPicker } from './components/NuxLayoutPicker';
 import { TabBar, type Tab } from './components/TabBar';
 import { WebMenuBar } from './components/WebMenuBar';
+import { EditableFileName } from './components/EditableFileName';
 import { Button } from './components/ui';
 import { panelComponents, tabComponents, WorkspaceTab } from './components/panels/PanelComponents';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
@@ -15,7 +17,7 @@ import type { WorkspaceState } from './contexts/WorkspaceContext';
 import {
   setDockviewApi,
   getDockviewApi,
-  applyDefaultLayout,
+  addPresetPanels,
   saveLayout,
   clearSavedLayout,
 } from './stores/layoutStore';
@@ -24,9 +26,9 @@ import { useAiAgent } from './hooks/useAiAgent';
 import { useHistory } from './hooks/useHistory';
 import { getPlatform, eventBus, type ExportFormat } from './platform';
 import { RenderService } from './services/renderService';
-import { useSettings, loadSettings } from './stores/settingsStore';
+import { useSettings, loadSettings, updateSetting } from './stores/settingsStore';
 import { formatOpenScadCode } from './utils/formatter';
-import { TbSettings, TbBox, TbRuler2 } from 'react-icons/tb';
+import { TbSettings, TbBox, TbRuler2, TbDownload } from 'react-icons/tb';
 import { Toaster, toast } from 'sonner';
 
 // Helper to generate unique IDs for tabs
@@ -37,6 +39,112 @@ function generateId(): string {
 // Helper to generate unique untitled names
 function generateUntitledName(): string {
   return `Untitled`;
+}
+
+const RELEASE_VERSION = '0.6.0';
+const RELEASE_BASE = `https://github.com/zacharyfmarion/openscad-studio/releases/download/v${RELEASE_VERSION}`;
+
+type MacArch = 'aarch64' | 'x64';
+
+function DownloadForMacLink() {
+  const [arch, setArch] = useState<MacArch>('aarch64');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const uaData = (
+      navigator as unknown as {
+        userAgentData?: {
+          getHighEntropyValues?: (hints: string[]) => Promise<{ architecture?: string }>;
+        };
+      }
+    ).userAgentData;
+
+    if (uaData?.getHighEntropyValues) {
+      uaData.getHighEntropyValues(['architecture']).then((values) => {
+        if (values.architecture === 'x86') setArch('x64');
+      });
+    }
+  }, []);
+
+  // Close dropdown on click outside or Escape key
+  useEffect(() => {
+    if (!showDropdown) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowDropdown(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [showDropdown]);
+
+  const label = arch === 'aarch64' ? 'Apple Silicon' : 'Intel';
+  const otherArch: MacArch = arch === 'aarch64' ? 'x64' : 'aarch64';
+  const otherLabel = arch === 'aarch64' ? 'Intel' : 'Apple Silicon';
+
+  const dmgUrl = `${RELEASE_BASE}/OpenSCAD.Studio_${RELEASE_VERSION}_${arch}.dmg`;
+  const otherDmgUrl = `${RELEASE_BASE}/OpenSCAD.Studio_${RELEASE_VERSION}_${otherArch}.dmg`;
+
+  return (
+    <div className="relative shrink-0" ref={dropdownRef}>
+      <div className="flex items-center">
+        <a
+          href={dmgUrl}
+          className="flex items-center gap-1 text-xs px-2 py-1 rounded-l transition-colors"
+          style={{ color: 'var(--text-secondary)' }}
+          title={`Download for macOS (${label})`}
+        >
+          <TbDownload size={13} />
+          <span>Download for Mac</span>
+        </a>
+        <button
+          type="button"
+          onClick={() => setShowDropdown((v) => !v)}
+          className="text-xs px-1 py-1 rounded-r transition-colors"
+          style={{ color: 'var(--text-tertiary)' }}
+          title="Other architectures"
+        >
+          ▾
+        </button>
+      </div>
+      {showDropdown && (
+        <div
+          className="absolute right-0 top-full mt-1 rounded-md shadow-lg border text-xs z-50 min-w-[160px]"
+          style={{
+            backgroundColor: 'var(--bg-elevated)',
+            borderColor: 'var(--border-secondary)',
+          }}
+        >
+          <a
+            href={dmgUrl}
+            className="block px-3 py-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onClick={() => setShowDropdown(false)}
+          >
+            macOS ({label}) ✓
+          </a>
+          <a
+            href={otherDmgUrl}
+            className="block px-3 py-2 transition-colors"
+            style={{ color: 'var(--text-secondary)' }}
+            onClick={() => setShowDropdown(false)}
+          >
+            macOS ({otherLabel})
+          </a>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function App() {
@@ -52,6 +160,7 @@ function App() {
   const [tabs, setTabs] = useState<Tab[]>([initialTab]);
   const [activeTabId, setActiveTabId] = useState<string>(initialTab.id);
   const [showWelcome, setShowWelcome] = useState(true);
+  const [showNux, setShowNux] = useState(() => !loadSettings().ui.hasCompletedNux);
 
   // Computed active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -74,6 +183,7 @@ function App() {
   const {
     source,
     updateSource,
+    updateSourceAndRender,
     previewSrc,
     previewKind,
     diagnostics,
@@ -261,6 +371,7 @@ function App() {
   const workingDirRef = useRef<string | null>(workingDir);
   const renderOnSaveRef = useRef(renderOnSave);
   const manualRenderRef = useRef(manualRender);
+  const updateSourceAndRenderRef = useRef(updateSourceAndRender);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -341,6 +452,10 @@ function App() {
     manualRenderRef.current = manualRender;
   }, [manualRender]);
 
+  useEffect(() => {
+    updateSourceAndRenderRef.current = updateSourceAndRender;
+  }, [updateSourceAndRender]);
+
   // Centralized render-on-tab-change effect
   // This ensures ANY tab switch triggers a render, regardless of how it happened
   const prevActiveTabIdRef = useRef<string | null>(null);
@@ -419,10 +534,16 @@ function App() {
         }
 
         let savePath: string | null;
+        const suggestedName = currentTab.name || 'untitled';
         if (promptForPath) {
-          savePath = await platform.fileSaveAs(currentSource, filters);
+          savePath = await platform.fileSaveAs(currentSource, filters, suggestedName);
         } else {
-          savePath = await platform.fileSave(currentSource, currentTab.filePath, filters);
+          savePath = await platform.fileSave(
+            currentSource,
+            currentTab.filePath,
+            filters,
+            suggestedName
+          );
         }
 
         if (!savePath) return false;
@@ -477,9 +598,20 @@ function App() {
     [submitPrompt]
   );
 
-  // Handle starting manually from welcome screen
   const handleStartManually = useCallback(() => {
     setShowWelcome(false);
+  }, []);
+
+  const handleNuxSelect = useCallback((preset: 'default' | 'ai-first') => {
+    updateSetting('ui', { hasCompletedNux: true, defaultLayoutPreset: preset });
+    setShowNux(false);
+
+    const api = getDockviewApi();
+    if (api) {
+      api.clear();
+      addPresetPanels(api, preset);
+      saveLayout();
+    }
   }, []);
 
   const handleOpenRecent = useCallback(
@@ -742,6 +874,15 @@ function App() {
   }, [activeTab]);
 
   useEffect(() => {
+    const platform = getPlatform();
+    if ('setDirtyState' in platform) {
+      (platform as { setDirtyState: (d: boolean) => void }).setDirtyState(
+        tabs.some((t) => t.isDirty)
+      );
+    }
+  }, [tabs]);
+
+  useEffect(() => {
     const unlisten = eventBus.on('render-requested', () => {
       if (manualRenderRef.current) {
         manualRenderRef.current();
@@ -752,7 +893,7 @@ function App() {
 
   useEffect(() => {
     const unlisten = eventBus.on('history:restore', ({ code }) => {
-      updateSource(code);
+      updateSourceAndRenderRef.current(code);
       setTabs((prev) =>
         prev.map((tab) =>
           tab.id === activeTabId
@@ -762,7 +903,21 @@ function App() {
       );
     });
     return unlisten;
-  }, [activeTabId, updateSource]);
+  }, [activeTabId]);
+
+  useEffect(() => {
+    const unlisten = eventBus.on('code-updated', ({ code }) => {
+      updateSourceAndRenderRef.current(code);
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === activeTabId
+            ? { ...tab, content: code, isDirty: code !== tab.savedContent }
+            : tab
+        )
+      );
+    });
+    return unlisten;
+  }, [activeTabId]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -807,7 +962,8 @@ function App() {
     setDockviewApi(api);
 
     clearSavedLayout();
-    applyDefaultLayout(api);
+    const savedPreset = loadSettings().ui.defaultLayoutPreset;
+    addPresetPanels(api, savedPreset);
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     api.onDidLayoutChange(() => {
@@ -855,6 +1011,10 @@ function App() {
       aiPromptPanelRef,
       onAcceptDiff: acceptDiff,
       onRejectDiff: rejectDiff,
+      onOpenAiSettings: () => {
+        setSettingsInitialTab('ai');
+        setShowSettingsDialog(true);
+      },
     }),
     [
       source,
@@ -901,12 +1061,12 @@ function App() {
           onStartManually={handleStartManually}
           onOpenRecent={handleOpenRecent}
           onOpenFile={handleOpenFile}
+          showRecentFiles={capabilities.hasFileSystem}
           onOpenSettings={() => {
             setSettingsInitialTab('ai');
             setShowSettingsDialog(true);
           }}
         />
-        {/* Settings dialog still accessible from welcome screen via keyboard shortcut */}
         <SettingsDialog
           isOpen={showSettingsDialog}
           onClose={() => {
@@ -916,6 +1076,7 @@ function App() {
           }}
           initialTab={settingsInitialTab}
         />
+        <NuxLayoutPicker isOpen={showNux} onSelect={handleNuxSelect} />
       </div>
     );
   }
@@ -926,7 +1087,7 @@ function App() {
       style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
     >
       <header
-        className="flex items-center gap-1.5 shrink-0"
+        className={`flex items-center gap-1.5 shrink-0 ${capabilities.multiFile ? '' : 'py-1'}`}
         style={{
           backgroundColor: 'var(--bg-secondary)',
           borderBottom: '1px solid var(--border-subtle)',
@@ -954,12 +1115,19 @@ function App() {
               onReorderTabs={reorderTabs}
             />
           ) : (
-            <div className="px-3 py-1 text-sm truncate" style={{ color: 'var(--text-secondary)' }}>
-              {activeTab.name}
-              {activeTab.isDirty ? ' •' : ''}
-            </div>
+            <EditableFileName
+              name={activeTab.name}
+              isDirty={activeTab.isDirty}
+              onRename={(newName) => {
+                setTabs((prev) =>
+                  prev.map((tab) => (tab.id === activeTabId ? { ...tab, name: newName } : tab))
+                );
+              }}
+            />
           )}
         </div>
+
+        {!capabilities.hasNativeMenu && <DownloadForMacLink />}
 
         <div className="flex items-center gap-1.5 px-3 shrink-0">
           {isRendering && (

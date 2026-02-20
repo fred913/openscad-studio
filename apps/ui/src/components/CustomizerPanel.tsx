@@ -5,11 +5,11 @@
  * and updates the source code when values change.
  */
 
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useRef } from 'react';
 import { parseCustomizerParams } from '../utils/customizer/parser';
 import type { CustomizerParam } from '../utils/customizer/types';
 import { ParameterControl } from './customizer/ParameterControl';
-import { TbChevronDown, TbChevronRight } from 'react-icons/tb';
+import { TbChevronDown, TbChevronRight, TbRefresh } from 'react-icons/tb';
 import { eventBus } from '../platform';
 
 interface CustomizerPanelProps {
@@ -19,6 +19,7 @@ interface CustomizerPanelProps {
 
 export function CustomizerPanel({ code, onChange }: CustomizerPanelProps) {
   const [collapsedTabs, setCollapsedTabs] = useState<Set<string>>(new Set());
+  const defaultsRef = useRef<Map<string, string> | null>(null);
 
   // Parse parameters from code
   const tabs = useMemo(() => {
@@ -29,6 +30,54 @@ export function CustomizerPanel({ code, onChange }: CustomizerPanelProps) {
       return [];
     }
   }, [code]);
+
+  // Capture default values on first successful parse
+  if (defaultsRef.current === null && tabs.length > 0) {
+    const defaults = new Map<string, string>();
+    for (const tab of tabs) {
+      for (const param of tab.params) {
+        defaults.set(param.name, param.rawValue);
+      }
+    }
+    defaultsRef.current = defaults;
+  }
+
+  // Check if any parameter has been modified from its default
+  const hasChanges = useMemo(() => {
+    if (!defaultsRef.current) return false;
+    for (const tab of tabs) {
+      for (const param of tab.params) {
+        const defaultValue = defaultsRef.current.get(param.name);
+        if (defaultValue !== undefined && param.rawValue !== defaultValue) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [tabs]);
+
+  // Reset all parameters to their default values
+  const handleResetDefaults = useCallback(() => {
+    if (!defaultsRef.current) return;
+
+    let newCode = code;
+    for (const tab of tabs) {
+      for (const param of tab.params) {
+        const defaultValue = defaultsRef.current.get(param.name);
+        if (defaultValue !== undefined && param.rawValue !== defaultValue) {
+          const assignmentPattern = new RegExp(`^(\\s*${param.name}\\s*=\\s*)([^;]+)(;.*)$`, 'gm');
+          newCode = newCode.replace(assignmentPattern, (_, prefix, __, suffix) => {
+            return prefix + defaultValue + suffix;
+          });
+        }
+      }
+    }
+
+    if (newCode !== code) {
+      onChange(newCode);
+      eventBus.emit('code-updated', { code: newCode });
+    }
+  }, [code, tabs, onChange]);
 
   // Handle parameter value change
   const handleParameterChange = useCallback(
@@ -66,15 +115,9 @@ export function CustomizerPanel({ code, onChange }: CustomizerPanelProps) {
 
       if (newCode !== code) {
         onChange(newCode);
-
-        // Trigger a render after updating the code
-        try {
-          eventBus.emit('render-requested');
-          if (import.meta.env.DEV)
-            console.log('[Customizer] Triggered render after parameter change:', param.name);
-        } catch (err) {
-          console.error('[Customizer] Failed to emit render-requested event:', err);
-        }
+        eventBus.emit('code-updated', { code: newCode });
+        if (import.meta.env.DEV)
+          console.log('[Customizer] Triggered render after parameter change:', param.name);
       } else {
         console.warn('[Customizer] Failed to update parameter:', param.name);
       }
@@ -126,6 +169,24 @@ export function CustomizerPanel({ code, onChange }: CustomizerPanelProps) {
   return (
     <div className="h-full overflow-y-auto" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       <div className="p-3">
+        <div className="flex justify-end mb-2">
+          <button
+            type="button"
+            onClick={handleResetDefaults}
+            disabled={!hasChanges}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors"
+            style={{
+              backgroundColor: hasChanges ? 'var(--bg-tertiary)' : 'transparent',
+              color: hasChanges ? 'var(--text-secondary)' : 'var(--text-tertiary)',
+              cursor: hasChanges ? 'pointer' : 'default',
+              opacity: hasChanges ? 1 : 0.5,
+            }}
+            title="Reset all parameters to default values"
+          >
+            <TbRefresh size={12} />
+            Reset
+          </button>
+        </div>
         {tabs.map((tab) => {
           const isCollapsed = collapsedTabs.has(tab.name);
 

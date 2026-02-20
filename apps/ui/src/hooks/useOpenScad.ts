@@ -113,6 +113,24 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
     setSource(newSource);
   }, []);
 
+  // Atomically update source AND render with the new code.
+  // This bypasses the stale-closure problem where manualRender() would
+  // render with the previous `source` because React hasn't flushed the
+  // state update from updateSource() yet.
+  const updateSourceAndRender = useCallback(
+    (newSource: string) => {
+      if (import.meta.env.DEV)
+        console.log('[useOpenScad] updateSourceAndRender called', {
+          codeLength: newSource.length,
+          dimensionMode,
+        });
+      setSource(newSource);
+      lastRenderedSourceRef.current = newSource;
+      doRender(newSource, dimensionMode);
+    },
+    [dimensionMode, doRender]
+  );
+
   // Initial render when WASM is ready
   useEffect(() => {
     if (ready && source) {
@@ -185,6 +203,7 @@ export function useOpenScad(options: UseOpenScadOptions = {}) {
   return {
     source,
     updateSource,
+    updateSourceAndRender,
     previewSrc,
     previewKind,
     diagnostics,

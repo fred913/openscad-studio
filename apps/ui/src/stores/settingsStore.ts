@@ -16,6 +16,8 @@ export interface AppearanceSettings {
 
 export interface UiSettings {
   customizerWidth: number;
+  hasCompletedNux: boolean;
+  defaultLayoutPreset: 'default' | 'ai-first';
 }
 
 export interface Settings {
@@ -64,6 +66,8 @@ const DEFAULT_SETTINGS: Settings = {
   },
   ui: {
     customizerWidth: 420,
+    hasCompletedNux: false,
+    defaultLayoutPreset: 'default',
   },
 };
 

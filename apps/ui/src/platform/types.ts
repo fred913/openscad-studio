@@ -53,10 +53,19 @@ export interface PlatformBridge {
    * If path is provided, saves directly (Tauri only). Otherwise prompts.
    * Returns the saved path, or null if cancelled.
    */
-  fileSave(content: string, path?: string | null, filters?: FileFilter[]): Promise<string | null>;
+  fileSave(
+    content: string,
+    path?: string | null,
+    filters?: FileFilter[],
+    defaultFilename?: string
+  ): Promise<string | null>;
 
   /** Always prompts for a new save location. Returns the saved path, or null if cancelled. */
-  fileSaveAs(content: string, filters?: FileFilter[]): Promise<string | null>;
+  fileSaveAs(
+    content: string,
+    filters?: FileFilter[],
+    defaultFilename?: string
+  ): Promise<string | null>;
 
   /** Export binary data (e.g., STL, PNG). Prompts for save location on desktop, triggers download on web. */
   fileExport(data: Uint8Array, defaultFilename: string, filters?: FileFilter[]): Promise<void>;

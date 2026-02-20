@@ -45,7 +45,8 @@ export class TauriBridge implements PlatformBridge {
   async fileSave(
     content: string,
     path?: string | null,
-    filters?: FileFilter[]
+    filters?: FileFilter[],
+    defaultFilename?: string
   ): Promise<string | null> {
     if (path) {
       const { writeTextFile } = await import('@tauri-apps/plugin-fs');
@@ -53,14 +54,18 @@ export class TauriBridge implements PlatformBridge {
       return path;
     }
 
-    return this.fileSaveAs(content, filters);
+    return this.fileSaveAs(content, filters, defaultFilename);
   }
 
-  async fileSaveAs(content: string, filters?: FileFilter[]): Promise<string | null> {
+  async fileSaveAs(
+    content: string,
+    filters?: FileFilter[],
+    defaultFilename?: string
+  ): Promise<string | null> {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const { writeTextFile } = await import('@tauri-apps/plugin-fs');
 
-    const savePath = await save({ filters });
+    const savePath = await save({ filters, defaultPath: defaultFilename });
     if (!savePath) return null;
 
     await writeTextFile(savePath, content);

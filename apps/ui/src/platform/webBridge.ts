@@ -55,6 +55,11 @@ function hasFileSystemAccess(): boolean {
 
 export class WebBridge implements PlatformBridge {
   readonly capabilities = capabilities;
+  private _hasDirtyState = false;
+
+  setDirtyState(dirty: boolean): void {
+    this._hasDirtyState = dirty;
+  }
 
   async fileRead(_path: string): Promise<FileOpenResult | null> {
     return null;
@@ -214,7 +219,9 @@ export class WebBridge implements PlatformBridge {
 
   onCloseRequested(handler: () => Promise<boolean>): () => void {
     const beforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
+      if (this._hasDirtyState) {
+        e.preventDefault();
+      }
     };
 
     window.addEventListener('beforeunload', beforeUnload);

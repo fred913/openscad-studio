@@ -225,8 +225,7 @@ export function buildTools(callbacks: AiToolCallbacks) {
           'ai'
         );
 
-        eventBus.emit('history:restore', { code: newCode });
-        eventBus.emit('render-requested');
+        eventBus.emit('code-updated', { code: newCode });
 
         const checkpointSuffix = `\n[CHECKPOINT:${checkpointId}]`;
         return `✅ Edit applied successfully!\n✅ Code compiles without new errors\n✅ Preview has been updated automatically\n\nRationale: ${rationale}\n\nThe changes are now live in the editor.${checkpointSuffix}`;

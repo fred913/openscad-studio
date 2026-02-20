@@ -26,10 +26,16 @@ export function useHistory() {
   }, []);
 
   useEffect(() => {
-    const unlisten = eventBus.on('history:restore', () => {
+    const unlistenRestore = eventBus.on('history:restore', () => {
       refreshHistoryState();
     });
-    return unlisten;
+    const unlistenCodeUpdated = eventBus.on('code-updated', () => {
+      refreshHistoryState();
+    });
+    return () => {
+      unlistenRestore();
+      unlistenCodeUpdated();
+    };
   }, [refreshHistoryState]);
 
   useEffect(() => {

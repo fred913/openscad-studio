@@ -44,6 +44,7 @@ const AiChatPanel: React.FC<IDockviewPanelProps> = () => {
       availableProviders={ws.availableProviders}
       onModelChange={ws.setCurrentModel}
       onRestoreCheckpoint={ws.handleRestoreCheckpoint}
+      onOpenSettings={ws.onOpenAiSettings}
     />
   );
 };

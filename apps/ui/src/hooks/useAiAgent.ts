@@ -78,6 +78,24 @@ export interface AiAgentState {
   availableProviders: string[];
 }
 
+function toolResultToOutput(result: unknown) {
+  if (typeof result === 'object' && result !== null && 'image_data_url' in result) {
+    const dataUrl = (result as { image_data_url: string }).image_data_url;
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    return {
+      type: 'content' as const,
+      value: [
+        { type: 'image-data' as const, data: base64, mediaType: 'image/png' as const },
+        { type: 'text' as const, text: 'Screenshot captured successfully.' },
+      ],
+    };
+  }
+  return {
+    type: 'text' as const,
+    value: typeof result === 'string' ? result : JSON.stringify(result),
+  };
+}
+
 function messagesToModelMessages(messages: Message[]): ModelMessage[] {
   const modelMessages: ModelMessage[] = [];
   let pendingToolCalls: Array<{
@@ -105,10 +123,7 @@ function messagesToModelMessages(messages: Message[]): ModelMessage[] {
             type: 'tool-result' as const,
             toolCallId: tr.toolCallId,
             toolName: tr.toolName,
-            output: {
-              type: 'text' as const,
-              value: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
-            },
+            output: toolResultToOutput(tr.result),
           })),
         });
         pendingToolCalls = [];
@@ -153,10 +168,7 @@ function messagesToModelMessages(messages: Message[]): ModelMessage[] {
         type: 'tool-result' as const,
         toolCallId: tr.toolCallId,
         toolName: tr.toolName,
-        output: {
-          type: 'text' as const,
-          value: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
-        },
+        output: toolResultToOutput(tr.result),
       })),
     });
   }
