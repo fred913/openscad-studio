@@ -129,6 +129,10 @@ rm -f apps/ui/src/App.tsx.bak
 # Update Cargo.lock
 (cd apps/ui/src-tauri && cargo update -p openscad-studio)
 
+# Re-format JSON files that jq may have reformatted
+info "Formatting modified files..."
+pnpm prettier --write package.json apps/ui/package.json "$TAURI_CONF"
+
 success "Version numbers updated"
 
 # Update CHANGELOG.md
