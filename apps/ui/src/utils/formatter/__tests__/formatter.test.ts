@@ -1,7 +1,6 @@
 /**
- * Formatter test suite using file-based fixtures
+ * @jest-environment node
  */
-
 import { formatOpenScadCode, initFormatter } from '../index';
 import { getAllTestCases, createDiff } from './test-utils';
 

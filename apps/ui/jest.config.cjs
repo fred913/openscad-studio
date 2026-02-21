@@ -1,10 +1,11 @@
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'ts-jest',
-  testEnvironment: 'node',
+  // Default to jsdom for store/hook tests; formatter tests override via docblock
+  testEnvironment: 'jsdom',
   roots: ['<rootDir>/src'],
-  // Only match test files, not utility files
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  // Match test files in __tests__ directories
+  testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
   // Ignore fixture files and other non-test files
   testPathIgnorePatterns: [
     '/node_modules/',

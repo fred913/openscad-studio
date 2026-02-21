@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { formatOpenScadCode } from '../openscadFormatter';
 
 describe('formatOpenScadCode', () => {
