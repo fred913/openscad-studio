@@ -4,10 +4,10 @@ import type { DockviewReadyEvent } from 'dockview';
 import 'dockview/dist/styles/dockview.css';
 import { ExportDialog } from './components/ExportDialog';
 import type { AiPromptPanelRef } from './components/AiPromptPanel';
-import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
-import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen';
+import { SettingsDialog } from './components/SettingsDialog';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { NuxLayoutPicker } from './components/NuxLayoutPicker';
-import { TabBar, type Tab } from './components/TabBar';
+import { TabBar } from './components/TabBar';
 import { WebMenuBar } from './components/WebMenuBar';
 import { EditableFileName } from './components/EditableFileName';
 import { Button } from './components/ui';
@@ -21,25 +21,19 @@ import {
   saveLayout,
   clearSavedLayout,
 } from './stores/layoutStore';
+import { useTabStore } from './stores/tabStore';
+import { useEditorStore } from './stores/editorStore';
+import { useUiStore } from './stores/uiStore';
 import { useOpenScad } from './hooks/useOpenScad';
 import { useAiAgent } from './hooks/useAiAgent';
 import { useHistory } from './hooks/useHistory';
-import { getPlatform, eventBus, type ExportFormat } from './platform';
-import { RenderService } from './services/renderService';
+import { useFileManager } from './hooks/useFileManager';
+import { useMenuListeners } from './hooks/useMenuListeners';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { getPlatform } from './platform';
 import { useSettings, loadSettings, updateSetting } from './stores/settingsStore';
-import { formatOpenScadCode } from './utils/formatter';
 import { TbSettings, TbBox, TbRuler2, TbDownload } from 'react-icons/tb';
 import { Toaster, toast } from 'sonner';
-
-// Helper to generate unique IDs for tabs
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 11);
-}
-
-// Helper to generate unique untitled names
-function generateUntitledName(): string {
-  return `Untitled`;
-}
 
 const RELEASE_VERSION = '0.7.1';
 const RELEASE_BASE = `https://github.com/zacharyfmarion/openscad-studio/releases/download/v${RELEASE_VERSION}`;
@@ -148,34 +142,19 @@ function DownloadForMacLink() {
 }
 
 function App() {
-  // Tab state
-  const initialTab: Tab = {
-    id: generateId(),
-    filePath: null,
-    name: generateUntitledName(),
-    content: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
-    savedContent: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
-    isDirty: false,
-  };
-  const [tabs, setTabs] = useState<Tab[]>([initialTab]);
-  const [activeTabId, setActiveTabId] = useState<string>(initialTab.id);
-  const [showWelcome, setShowWelcome] = useState(true);
-  const [showNux, setShowNux] = useState(() => !loadSettings().ui.hasCompletedNux);
+  const { tabs, activeTabId, createTab, switchTab, closeTab, reorderTabs } = useTabStore();
+  const activeTab = useTabStore((s) => s.getActiveTab());
 
-  // Computed active tab
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const { showWelcome, showNux, showExportDialog, showSettingsDialog, settingsInitialTab } =
+    useUiStore();
+  const { setShowNux, openExportDialog, closeExportDialog, openSettings, closeSettings } =
+    useUiStore();
 
-  // Get working directory from active tab's file path (for resolving relative imports)
   const workingDir =
     activeTab?.filePath && typeof activeTab.filePath === 'string'
       ? activeTab.filePath.substring(0, activeTab.filePath.lastIndexOf('/'))
       : null;
 
-  const [showExportDialog, setShowExportDialog] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsSection | undefined>(
-    undefined
-  );
   const [settings] = useSettings();
   const { capabilities } = getPlatform();
   const { undo, redo } = useHistory();
@@ -239,163 +218,65 @@ function App() {
     loadModelAndProviders,
   } = useAiAgent();
 
-  // Tab management functions
-  const createNewTab = useCallback(
-    (filePath?: string | null, content?: string, name?: string): string => {
-      const newId = generateId();
-      const defaultContent = '// Type your OpenSCAD code here\ncube([10, 10, 10]);';
-      const tabContent = content || defaultContent;
-      const tabName = name || generateUntitledName();
-      const newTab: Tab = {
-        id: newId,
-        filePath: filePath || null,
-        name: tabName,
-        content: tabContent,
-        savedContent: tabContent,
-        isDirty: false,
-      };
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(newId);
+  const {
+    saveFile,
+    handleOpenFile,
+    handleOpenRecent,
+    handleStartWithPrompt,
+    handleStartManually,
+    checkUnsavedChanges,
+  } = useFileManager();
 
-      updateSource(tabContent);
+  useMenuListeners({ checkUnsavedChanges, saveFile });
+  useKeyboardShortcuts({ aiPromptPanelRef });
 
-      return newId;
-    },
-    [updateSource]
-  );
+  useEffect(() => {
+    useEditorStore.getState().syncFromOpenScad({
+      source,
+      previewSrc,
+      previewKind,
+      diagnostics,
+      isRendering,
+      error,
+      ready,
+      dimensionMode,
+      auxiliaryFiles,
+    });
+  }, [
+    source,
+    previewSrc,
+    previewKind,
+    diagnostics,
+    isRendering,
+    error,
+    ready,
+    dimensionMode,
+    auxiliaryFiles,
+  ]);
 
-  const switchingRef = useRef(false);
+  useEffect(() => {
+    useEditorStore.getState().setRenderCallbacks({
+      manualRender,
+      renderOnSave,
+      updateSource,
+      updateSourceAndRender,
+    });
+  }, [manualRender, renderOnSave, updateSource, updateSourceAndRender]);
 
-  const switchTab = useCallback(
-    async (id: string) => {
-      if (id === activeTabId || switchingRef.current) return;
-      switchingRef.current = true;
-
-      setTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, previewSrc, previewKind, diagnostics, dimensionMode, content: source }
-            : tab
-        )
-      );
-
-      setActiveTabId(id);
-      const newTab = tabs.find((t) => t.id === id);
-      if (newTab) {
-        updateSource(newTab.content);
-      }
-
-      switchingRef.current = false;
-    },
-    [activeTabId, tabs, previewSrc, previewKind, diagnostics, dimensionMode, source, updateSource]
-  );
-
-  const closeTab = useCallback(
-    async (id: string) => {
-      const tab = tabs.find((t) => t.id === id);
-      if (!tab) return;
-
-      if (tab.isDirty) {
-        const platform = getPlatform();
-        const wantsToSave = await platform.ask(`Save changes to ${tab.name}?`, {
-          title: 'Unsaved Changes',
-          kind: 'warning',
-          okLabel: 'Save',
-          cancelLabel: "Don't Save",
-        });
-
-        if (wantsToSave) {
-          return;
-        } else {
-          const confirmDiscard = await platform.confirm(
-            'Are you sure you want to discard your changes?',
-            {
-              title: 'Discard Changes',
-              kind: 'warning',
-              okLabel: 'Discard',
-              cancelLabel: 'Cancel',
-            }
-          );
-          if (!confirmDiscard) return;
-        }
-      }
-
-      const filtered = tabs.filter((t) => t.id !== id);
-
-      if (filtered.length === 0) {
-        setShowWelcome(true);
-        const newId = generateId();
-        const tabName = generateUntitledName();
-        const newTab: Tab = {
-          id: newId,
-          filePath: null,
-          name: tabName,
-          content: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
-          savedContent: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
-          isDirty: false,
-        };
-        setTabs([newTab]);
-        setActiveTabId(newId);
-        updateSource(newTab.content);
-        return;
-      }
-
-      if (id === activeTabId) {
-        const idx = tabs.findIndex((t) => t.id === id);
-        const newActiveTab = filtered[Math.max(0, idx - 1)];
-        setTabs(filtered);
-        setActiveTabId(newActiveTab.id);
-        updateSource(newActiveTab.content);
-      } else {
-        setTabs(filtered);
-      }
-    },
-    [tabs, activeTabId, updateSource]
-  );
-
-  const updateTabContent = useCallback((id: string, content: string) => {
-    setTabs((prev) =>
-      prev.map((tab) =>
-        tab.id === id ? { ...tab, content, isDirty: content !== tab.savedContent } : tab
-      )
-    );
+  useEffect(() => {
+    useUiStore.getState().setShowNux(!loadSettings().ui.hasCompletedNux);
   }, []);
 
-  const reorderTabs = useCallback((newTabs: Tab[]) => {
-    setTabs(newTabs);
-  }, []);
-
-  // Note: Tree-sitter formatter is initialized in main.tsx for optimal performance
-
-  // Use refs to avoid stale closures in event listeners
-  const activeTabRef = useRef<Tab>(activeTab);
-  const tabsRef = useRef<Tab[]>(tabs);
-  const sourceRef = useRef<string>(source);
-  const workingDirRef = useRef<string | null>(workingDir);
-  const renderOnSaveRef = useRef(renderOnSave);
-  const manualRenderRef = useRef(manualRender);
-  const updateSourceAndRenderRef = useRef(updateSourceAndRender);
-
-  // Keep refs in sync with state
   useEffect(() => {
-    activeTabRef.current = activeTab;
-  }, [activeTab]);
-
-  useEffect(() => {
-    tabsRef.current = tabs;
-  }, [tabs]);
-
-  useEffect(() => {
-    sourceRef.current = source;
     updateSourceRef(source);
   }, [source, updateSourceRef]);
 
   useEffect(() => {
     updateStlBlobUrl(previewKind === 'mesh' && previewSrc ? previewSrc : null);
   }, [previewSrc, previewKind, updateStlBlobUrl]);
+
   useEffect(() => {
     updateCapturePreview(async () => {
-      // Try to capture the Three.js WebGL canvas (3D preview)
       const canvas = document.querySelector('canvas[data-engine]') as HTMLCanvasElement | null;
       if (canvas) {
         try {
@@ -444,7 +325,6 @@ function App() {
   }, [updateCapturePreview]);
 
   useEffect(() => {
-    workingDirRef.current = workingDir;
     updateWorkingDir(workingDir);
   }, [workingDir, updateWorkingDir]);
 
@@ -452,511 +332,45 @@ function App() {
     updateAuxiliaryFiles(auxiliaryFiles);
   }, [auxiliaryFiles, updateAuxiliaryFiles]);
 
-  useEffect(() => {
-    renderOnSaveRef.current = renderOnSave;
-  }, [renderOnSave]);
-
-  useEffect(() => {
-    manualRenderRef.current = manualRender;
-  }, [manualRender]);
-
-  useEffect(() => {
-    updateSourceAndRenderRef.current = updateSourceAndRender;
-  }, [updateSourceAndRender]);
-
-  // Centralized render-on-tab-change effect
-  // This ensures ANY tab switch triggers a render, regardless of how it happened
   const prevActiveTabIdRef = useRef<string | null>(null);
-  const tabSwitchRenderTimerRef = useRef<number | null>(null);
-
   useEffect(() => {
-    // Skip initial mount - only render on actual tab changes
     if (prevActiveTabIdRef.current === null) {
       prevActiveTabIdRef.current = activeTabId;
       return;
     }
-
-    // Skip if switching to welcome screen
     if (showWelcome) {
       prevActiveTabIdRef.current = activeTabId;
       return;
     }
-
-    // Only render if tab actually changed
     if (prevActiveTabIdRef.current !== activeTabId) {
-      // Clear any pending render
-      if (tabSwitchRenderTimerRef.current) {
-        clearTimeout(tabSwitchRenderTimerRef.current);
-      }
-
-      // Debounced render - handles rapid tab switching gracefully
-      tabSwitchRenderTimerRef.current = window.setTimeout(() => {
-        if (manualRenderRef.current) {
-          const currentTab = tabs.find((t) => t.id === activeTabId);
-          if (import.meta.env.DEV)
-            console.log('[App] Auto-rendering after tab change to:', currentTab?.name);
-          manualRenderRef.current();
-        }
-        tabSwitchRenderTimerRef.current = null;
+      const timer = window.setTimeout(() => {
+        manualRender();
       }, 150);
-
       prevActiveTabIdRef.current = activeTabId;
+      return () => clearTimeout(timer);
     }
+  }, [activeTabId, showWelcome, manualRender]);
 
-    // Cleanup timer on unmount or tab change
-    return () => {
-      if (tabSwitchRenderTimerRef.current) {
-        clearTimeout(tabSwitchRenderTimerRef.current);
-      }
-    };
-  }, [activeTabId, showWelcome, tabs]);
-
-  // Sync active tab content with editor source
   useEffect(() => {
     if (activeTab && source !== activeTab.content) {
-      updateTabContent(activeTabId, source);
+      useTabStore.getState().updateTabContent(activeTabId, source);
     }
-  }, [source, activeTab, activeTabId, updateTabContent]);
+  }, [source, activeTab, activeTabId]);
 
-  // Helper function to save file to current path or prompt for new path
-  const saveFile = useCallback(
-    async (promptForPath: boolean = false): Promise<boolean> => {
-      try {
-        const currentTab = activeTabRef.current;
-        const platform = getPlatform();
-        const filters = [{ name: 'OpenSCAD Files', extensions: ['scad'] }];
+  const handleNuxSelect = useCallback(
+    (preset: 'default' | 'ai-first') => {
+      updateSetting('ui', { hasCompletedNux: true, defaultLayoutPreset: preset });
+      setShowNux(false);
 
-        let currentSource = sourceRef.current;
-
-        const currentSettings = loadSettings();
-        if (currentSettings.editor.formatOnSave) {
-          try {
-            currentSource = await formatOpenScadCode(currentSource, {
-              indentSize: currentSettings.editor.indentSize,
-              useTabs: currentSettings.editor.useTabs,
-            });
-            updateSource(currentSource);
-          } catch (err) {
-            console.error('[saveFile] Failed to format code:', err);
-          }
-        }
-
-        let savePath: string | null;
-        const suggestedName = currentTab.name || 'untitled';
-        if (promptForPath) {
-          savePath = await platform.fileSaveAs(currentSource, filters, suggestedName);
-        } else {
-          savePath = await platform.fileSave(
-            currentSource,
-            currentTab.filePath,
-            filters,
-            suggestedName
-          );
-        }
-
-        if (!savePath) return false;
-
-        const fileName = savePath.split('/').pop() || savePath;
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.id === currentTab.id
-              ? {
-                  ...tab,
-                  filePath: savePath,
-                  name: fileName,
-                  savedContent: currentSource,
-                  isDirty: false,
-                }
-              : tab
-          )
-        );
-
-        const dockPanel = getDockviewApi()?.getPanel(currentTab.id);
-        if (dockPanel) {
-          dockPanel.api.setTitle(fileName);
-        }
-
-        addToRecentFiles(savePath);
-
-        // Trigger render on save (only if OpenSCAD is available)
-        if (renderOnSaveRef.current) {
-          renderOnSaveRef.current();
-        }
-
-        return true;
-      } catch (err) {
-        console.error('[saveFile] Save failed:', err);
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        toast.error(`Failed to save file: ${errorMsg}`);
-        return false;
+      const api = getDockviewApi();
+      if (api) {
+        api.clear();
+        addPresetPanels(api, preset);
+        saveLayout();
       }
     },
-    [updateSource]
+    [setShowNux]
   );
-
-  // Handle starting with AI prompt from welcome screen
-  const handleStartWithPrompt = useCallback(
-    (prompt: string) => {
-      setShowWelcome(false);
-      // Submit prompt after a small delay to ensure UI is ready
-      setTimeout(() => {
-        submitPrompt(prompt);
-      }, 100);
-    },
-    [submitPrompt]
-  );
-
-  const handleStartManually = useCallback(() => {
-    setShowWelcome(false);
-  }, []);
-
-  const handleNuxSelect = useCallback((preset: 'default' | 'ai-first') => {
-    updateSetting('ui', { hasCompletedNux: true, defaultLayoutPreset: preset });
-    setShowNux(false);
-
-    const api = getDockviewApi();
-    if (api) {
-      api.clear();
-      addPresetPanels(api, preset);
-      saveLayout();
-    }
-  }, []);
-
-  const handleOpenRecent = useCallback(
-    async (path: string) => {
-      try {
-        const existingTab = tabs.find((t) => t.filePath === path);
-        if (existingTab) {
-          await switchTab(existingTab.id);
-          setShowWelcome(false);
-          return;
-        }
-
-        // On web, recent files won't have real paths — this is a Tauri-only feature
-        // but we keep the interface for compatibility
-        const platform = getPlatform();
-        if (!platform.capabilities.hasFileSystem) {
-          toast.error('Cannot open recent files in web mode');
-          return;
-        }
-
-        const result = await platform.fileRead(path);
-        if (!result) return;
-
-        const firstTab = tabs[0];
-        const shouldReplaceFirstTab =
-          showWelcome && tabs.length === 1 && !firstTab.filePath && !firstTab.isDirty;
-
-        if (shouldReplaceFirstTab) {
-          setTabs([
-            {
-              ...firstTab,
-              filePath: result.path,
-              name: result.name,
-              content: result.content,
-              savedContent: result.content,
-              isDirty: false,
-            },
-          ]);
-          updateSource(result.content);
-        } else {
-          createNewTab(result.path, result.content, result.name);
-        }
-
-        setShowWelcome(false);
-        if (result.path) addToRecentFiles(result.path);
-
-        if (manualRenderRef.current) {
-          setTimeout(() => {
-            if (manualRenderRef.current) {
-              manualRenderRef.current();
-            }
-          }, 100);
-        }
-      } catch (err) {
-        console.error('Failed to open recent file:', err);
-        toast.error(`Failed to open file: ${err}`);
-      }
-    },
-    [tabs, showWelcome, switchTab, createNewTab, updateSource]
-  );
-
-  const handleOpenFile = useCallback(async () => {
-    try {
-      const result = await getPlatform().fileOpen([
-        { name: 'OpenSCAD Files', extensions: ['scad'] },
-      ]);
-      if (!result) return;
-
-      if (result.path) {
-        const existingTab = tabs.find((t) => t.filePath === result.path);
-        if (existingTab) {
-          await switchTab(existingTab.id);
-          setShowWelcome(false);
-          return;
-        }
-      }
-
-      const firstTab = tabs[0];
-      const shouldReplaceFirstTab =
-        showWelcome && tabs.length === 1 && !firstTab.filePath && !firstTab.isDirty;
-
-      if (shouldReplaceFirstTab) {
-        setTabs([
-          {
-            ...firstTab,
-            filePath: result.path,
-            name: result.name,
-            content: result.content,
-            savedContent: result.content,
-            isDirty: false,
-          },
-        ]);
-        updateSource(result.content);
-      } else {
-        createNewTab(result.path, result.content, result.name);
-      }
-
-      setShowWelcome(false);
-      if (result.path) addToRecentFiles(result.path);
-
-      if (manualRenderRef.current) {
-        setTimeout(() => {
-          if (manualRenderRef.current) {
-            manualRenderRef.current();
-          }
-        }, 100);
-      }
-    } catch (err) {
-      console.error('Failed to open file:', err);
-      toast.error(`Failed to open file: ${err}`);
-    }
-  }, [tabs, showWelcome, switchTab, createNewTab, updateSource]);
-
-  // Helper function to check for unsaved changes before destructive operations
-  // Returns: true if ok to proceed, false if user wants to cancel
-  const checkUnsavedChangesRef = useRef<() => Promise<boolean>>();
-
-  checkUnsavedChangesRef.current = async (): Promise<boolean> => {
-    if (!activeTabRef.current.isDirty) return true;
-
-    const platform = getPlatform();
-
-    const wantsToSave = await platform.ask('Do you want to save the changes you made?', {
-      title: 'Unsaved Changes',
-      kind: 'warning',
-      okLabel: 'Save',
-      cancelLabel: "Don't Save",
-    });
-
-    if (wantsToSave) {
-      return await saveFile(false);
-    } else {
-      const confirmDiscard = await platform.confirm(
-        'Are you sure you want to discard your changes?',
-        {
-          title: 'Discard Changes',
-          kind: 'warning',
-          okLabel: 'Discard',
-          cancelLabel: 'Cancel',
-        }
-      );
-      return confirmDiscard;
-    }
-  };
-
-  useEffect(() => {
-    const unlistenFns: Array<() => void> = [];
-
-    unlistenFns.push(
-      eventBus.on('menu:file:new', async () => {
-        const canProceed = checkUnsavedChangesRef.current
-          ? await checkUnsavedChangesRef.current()
-          : true;
-        if (!canProceed) return;
-
-        createNewTab();
-        setShowWelcome(true);
-      })
-    );
-
-    unlistenFns.push(
-      eventBus.on('menu:file:open', async () => {
-        try {
-          const result = await getPlatform().fileOpen([
-            { name: 'OpenSCAD Files', extensions: ['scad'] },
-          ]);
-          if (!result) return;
-
-          if (result.path) {
-            const existingTab = tabsRef.current.find((t) => t.filePath === result.path);
-            if (existingTab) {
-              await switchTab(existingTab.id);
-              setShowWelcome(false);
-              return;
-            }
-          }
-
-          createNewTab(result.path, result.content, result.name);
-          setShowWelcome(false);
-
-          if (result.path) addToRecentFiles(result.path);
-
-          if (manualRenderRef.current) {
-            setTimeout(() => {
-              if (manualRenderRef.current) {
-                manualRenderRef.current();
-              }
-            }, 100);
-          }
-        } catch (err) {
-          console.error('Open failed:', err);
-          toast.error(`Failed to open file: ${err}`);
-        }
-      })
-    );
-
-    unlistenFns.push(
-      eventBus.on('menu:file:save', async () => {
-        await saveFile(false);
-      })
-    );
-
-    unlistenFns.push(
-      eventBus.on('menu:file:save_as', async () => {
-        await saveFile(true);
-      })
-    );
-
-    unlistenFns.push(
-      eventBus.on('menu:file:export', async (format: ExportFormat) => {
-        try {
-          const formatLabels: Record<ExportFormat, { label: string; ext: string }> = {
-            stl: { label: 'STL (3D Model)', ext: 'stl' },
-            obj: { label: 'OBJ (3D Model)', ext: 'obj' },
-            amf: { label: 'AMF (3D Model)', ext: 'amf' },
-            '3mf': { label: '3MF (3D Model)', ext: '3mf' },
-            png: { label: 'PNG (Image)', ext: 'png' },
-            svg: { label: 'SVG (2D Vector)', ext: 'svg' },
-            dxf: { label: 'DXF (2D CAD)', ext: 'dxf' },
-          };
-          const formatInfo = formatLabels[format];
-          const exportBytes = await RenderService.getInstance().exportModel(
-            sourceRef.current,
-            format as 'stl' | 'obj' | 'amf' | '3mf' | 'svg' | 'dxf'
-          );
-          await getPlatform().fileExport(exportBytes, `export.${formatInfo.ext}`, [
-            { name: formatInfo.label, extensions: [formatInfo.ext] },
-          ]);
-          toast.success('Exported successfully');
-        } catch (err) {
-          console.error('Export failed:', err);
-          toast.error(`Export failed: ${err}`);
-        }
-      })
-    );
-
-    return () => {
-      unlistenFns.forEach((fn) => fn());
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const platform = getPlatform();
-    const unlisten = platform.onCloseRequested(async () => {
-      const anyDirty = tabsRef.current.some((t) => t.isDirty);
-      if (!anyDirty) return true;
-      return checkUnsavedChangesRef.current ? await checkUnsavedChangesRef.current() : true;
-    });
-
-    return () => {
-      unlisten();
-    };
-  }, []);
-
-  useEffect(() => {
-    const fileName = activeTab.name;
-    const dirtyIndicator = activeTab.isDirty ? '\u2022 ' : '';
-    getPlatform().setWindowTitle(`${dirtyIndicator}${fileName} - OpenSCAD Studio`);
-  }, [activeTab]);
-
-  useEffect(() => {
-    const platform = getPlatform();
-    if ('setDirtyState' in platform) {
-      (platform as { setDirtyState: (d: boolean) => void }).setDirtyState(
-        tabs.some((t) => t.isDirty)
-      );
-    }
-  }, [tabs]);
-
-  useEffect(() => {
-    const unlisten = eventBus.on('render-requested', () => {
-      if (manualRenderRef.current) {
-        manualRenderRef.current();
-      }
-    });
-    return unlisten;
-  }, []);
-
-  useEffect(() => {
-    const unlisten = eventBus.on('history:restore', ({ code }) => {
-      updateSourceAndRenderRef.current(code);
-      setTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, content: code, isDirty: code !== tab.savedContent }
-            : tab
-        )
-      );
-    });
-    return unlisten;
-  }, [activeTabId]);
-
-  useEffect(() => {
-    const unlisten = eventBus.on('code-updated', ({ code }) => {
-      updateSourceAndRenderRef.current(code);
-      setTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, content: code, isDirty: code !== tab.savedContent }
-            : tab
-        )
-      );
-    });
-    return unlisten;
-  }, [activeTabId]);
-
-  // Global keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // ⌘K or Ctrl+K to focus AI prompt
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setTimeout(() => {
-          aiPromptPanelRef.current?.focusPrompt();
-        }, 0);
-      }
-      // ⌘, or Ctrl+, to open settings
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
-        setShowSettingsDialog(true);
-      }
-      // ⌘T or Ctrl+T for new tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
-        e.preventDefault();
-        createNewTab();
-      }
-      // ⌘W or Ctrl+W to close tab
-      if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
-        e.preventDefault();
-        closeTab(activeTabId);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createNewTab, closeTab, activeTabId]);
 
   useEffect(() => {
     if (aiError) {
@@ -993,7 +407,7 @@ function App() {
       activeTabId,
       onTabClick: switchTab,
       onTabClose: closeTab,
-      onNewTab: () => createNewTab(),
+      onNewTab: () => createTab(),
       onReorderTabs: reorderTabs,
       previewSrc,
       previewKind,
@@ -1020,8 +434,7 @@ function App() {
       onAcceptDiff: acceptDiff,
       onRejectDiff: rejectDiff,
       onOpenAiSettings: () => {
-        setSettingsInitialTab('ai');
-        setShowSettingsDialog(true);
+        useUiStore.getState().openSettings('ai');
       },
     }),
     [
@@ -1034,7 +447,7 @@ function App() {
       activeTabId,
       switchTab,
       closeTab,
-      createNewTab,
+      createTab,
       reorderTabs,
       previewSrc,
       previewKind,
@@ -1065,21 +478,19 @@ function App() {
     return (
       <div className="h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <WelcomeScreen
-          onStartWithPrompt={handleStartWithPrompt}
+          onStartWithPrompt={(prompt) => handleStartWithPrompt(prompt, submitPrompt)}
           onStartManually={handleStartManually}
           onOpenRecent={handleOpenRecent}
           onOpenFile={handleOpenFile}
           showRecentFiles={capabilities.hasFileSystem}
           onOpenSettings={() => {
-            setSettingsInitialTab('ai');
-            setShowSettingsDialog(true);
+            openSettings('ai');
           }}
         />
         <SettingsDialog
           isOpen={showSettingsDialog}
           onClose={() => {
-            setShowSettingsDialog(false);
-            setSettingsInitialTab(undefined);
+            closeSettings();
             loadModelAndProviders();
           }}
           initialTab={settingsInitialTab}
@@ -1104,8 +515,8 @@ function App() {
         {/* Web menu bar (web only — no native menu) */}
         {!capabilities.hasNativeMenu && (
           <WebMenuBar
-            onExport={() => setShowExportDialog(true)}
-            onSettings={() => setShowSettingsDialog(true)}
+            onExport={openExportDialog}
+            onSettings={openSettings}
             onUndo={handleUndo}
             onRedo={handleRedo}
           />
@@ -1119,7 +530,7 @@ function App() {
               activeTabId={activeTabId}
               onTabClick={switchTab}
               onTabClose={closeTab}
-              onNewTab={() => createNewTab()}
+              onNewTab={() => createTab()}
               onReorderTabs={reorderTabs}
             />
           ) : (
@@ -1127,9 +538,7 @@ function App() {
               name={activeTab.name}
               isDirty={activeTab.isDirty}
               onRename={(newName) => {
-                setTabs((prev) =>
-                  prev.map((tab) => (tab.id === activeTabId ? { ...tab, name: newName } : tab))
-                );
+                useTabStore.getState().renameTab(activeTabId, newName);
               }}
             />
           )}
@@ -1189,7 +598,7 @@ function App() {
           </Button>
           <Button
             variant="secondary"
-            onClick={() => setShowExportDialog(true)}
+            onClick={openExportDialog}
             disabled={isRendering || !ready}
             className="text-xs px-2 py-1"
           >
@@ -1202,7 +611,7 @@ function App() {
 
           <button
             type="button"
-            onClick={() => setShowSettingsDialog(true)}
+            onClick={openSettings}
             className="p-1 rounded-md transition-colors"
             style={{
               backgroundColor: 'transparent',
@@ -1232,7 +641,7 @@ function App() {
       {/* Export dialog */}
       <ExportDialog
         isOpen={showExportDialog}
-        onClose={() => setShowExportDialog(false)}
+        onClose={closeExportDialog}
         source={source}
         workingDir={workingDir}
       />
@@ -1241,8 +650,7 @@ function App() {
       <SettingsDialog
         isOpen={showSettingsDialog}
         onClose={() => {
-          setShowSettingsDialog(false);
-          setSettingsInitialTab(undefined);
+          closeSettings();
           loadModelAndProviders();
         }}
         initialTab={settingsInitialTab}
