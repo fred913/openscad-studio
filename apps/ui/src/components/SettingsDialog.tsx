@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   loadSettings,
   saveSettings,
@@ -18,7 +19,12 @@ import {
   clearApiKey as clearApiKeyFromStorage,
   hasApiKeyForProvider,
   getAvailableProviders as getAvailableProvidersFromStore,
+  setOpenAIBaseUrl,
+  getOpenAIBaseUrl,
+  setCustomModels,
+  getCustomModels,
 } from '../stores/apiKeyStore';
+import { setLanguage, getLanguage } from '../i18n';
 import { getPlatform } from '../platform';
 import { applyWorkspacePreset } from '../stores/layoutStore';
 
@@ -56,9 +62,10 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
   const [localVimConfig, setLocalVimConfig] = useState<string>(settings.editor.vimConfig);
 
   // AI Settings
-  const [provider, setProvider] = useState<'anthropic' | 'openai'>('anthropic');
+  const { t } = useTranslation();
   const [apiKey, setApiKey] = useState('');
-  const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
+  const [baseUrl, setBaseUrl] = useState('');
+  const [customModelsConfig, setCustomModelsConfig] = useState('');
   const [hasOpenAIKey, setHasOpenAIKey] = useState(false);
   const [isLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,16 +74,18 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
 
   const loadAISettings = useCallback(() => {
     const availableProviders = getAvailableProvidersFromStore();
-    setHasAnthropicKey(availableProviders.includes('anthropic'));
     setHasOpenAIKey(availableProviders.includes('openai'));
 
-    const hasCurrentKey = hasApiKeyForProvider(provider);
+    const hasCurrentKey = hasApiKeyForProvider('openai');
     if (hasCurrentKey) {
       setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
     } else {
       setApiKey('');
     }
-  }, [provider]);
+    
+    setBaseUrl(getOpenAIBaseUrl() || '');
+    setCustomModelsConfig(getCustomModels() || '');
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -124,25 +133,20 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
 
   const handleSave = () => {
     if (!apiKey.trim() || apiKey.startsWith('•')) {
-      setError('Please enter a valid API key');
+      setError(t('settings.enterValidKey'));
       return;
     }
 
     setError(null);
     setSuccessMessage(null);
 
-    storeApiKeyToStorage(provider, apiKey);
+    storeApiKeyToStorage('openai', apiKey);
+    setOpenAIBaseUrl(baseUrl);
+    setCustomModels(customModelsConfig);
     invalidateApiKeyStatus();
-    setSuccessMessage(
-      `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key saved successfully!`
-    );
+    setSuccessMessage(t('settings.keySaved'));
 
-    if (provider === 'anthropic') {
-      setHasAnthropicKey(true);
-    } else {
-      setHasOpenAIKey(true);
-    }
-
+    setHasOpenAIKey(true);
     setApiKey('••••••••••••••••••••••••••••••••••••••••••••');
     setShowKey(false);
     setTimeout(() => {
@@ -152,24 +156,24 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
 
   const handleClear = async () => {
     const confirmed = await getPlatform().confirm(
-      `Are you sure you want to remove your ${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} API key?`,
-      { title: 'Remove API Key', kind: 'warning', okLabel: 'Remove', cancelLabel: 'Cancel' }
+      t('settings.removeKeyConfirm'),
+      { 
+        title: t('settings.removeKeyTitle'), 
+        kind: 'warning', 
+        okLabel: t('settings.removeKeyOk'), 
+        cancelLabel: t('settings.removeKeyCancel') 
+      }
     );
     if (!confirmed) return;
 
     setError(null);
     setSuccessMessage(null);
 
-    clearApiKeyFromStorage(provider);
+    clearApiKeyFromStorage('openai');
     invalidateApiKeyStatus();
-    setSuccessMessage('API key cleared successfully');
+    setSuccessMessage(t('settings.keyCleared'));
 
-    if (provider === 'anthropic') {
-      setHasAnthropicKey(false);
-    } else {
-      setHasOpenAIKey(false);
-    }
-
+    setHasOpenAIKey(false);
     setApiKey('');
     setTimeout(() => {
       setSuccessMessage(null);
@@ -185,9 +189,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
   if (!isOpen) return null;
 
   const navItems: { key: SettingsSection; label: string; icon: React.ReactNode }[] = [
-    { key: 'appearance', label: 'Appearance', icon: <TbPalette size={16} /> },
-    { key: 'editor', label: 'Editor', icon: <TbCode size={16} /> },
-    { key: 'ai', label: 'AI Assistant', icon: <TbSparkles size={16} /> },
+    { key: 'appearance', label: t('settings.appearance'), icon: <TbPalette size={16} /> },
+    { key: 'editor', label: t('settings.editor'), icon: <TbCode size={16} /> },
+    { key: 'ai', label: t('settings.ai'), icon: <TbSparkles size={16} /> },
   ];
 
   return (
@@ -217,7 +221,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
               className="text-sm font-semibold uppercase tracking-wider"
               style={{ color: 'var(--text-tertiary)' }}
             >
-              Settings
+              {t('settings.title')}
             </h2>
           </div>
           <nav className="flex-1 px-3 space-y-1">
@@ -263,10 +267,10 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
           >
             <h3 className="text-sm font-medium" style={{ color: 'var(--text-tertiary)' }}>
               {activeSection === 'appearance'
-                ? 'Appearance'
+                ? t('settings.appearance')
                 : activeSection === 'editor'
-                  ? 'Editor'
-                  : 'AI Assistant'}
+                  ? t('settings.editor')
+                  : t('settings.ai')}
             </h3>
             <button
               type="button"
@@ -291,14 +295,31 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
             {activeSection === 'appearance' && (
               <div className="space-y-6">
                 <div>
-                  <Label>Default Layout</Label>
+                  <Label>{t('settings.language')}</Label>
                   <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
-                    Choose which panel arrangement to use as your default workspace
+                    {t('settings.languageDesc')}
+                  </p>
+                  <Select
+                    value={getLanguage()}
+                    onChange={(e) => {
+                      setLanguage(e.target.value);
+                      window.location.reload(); // Reload to apply language change
+                    }}
+                  >
+                    <option value="en">English</option>
+                    <option value="zh">简体中文 (Simplified Chinese)</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>{t('settings.defaultLayout')}</Label>
+                  <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
+                    {t('settings.defaultLayoutDesc')}
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { preset: 'default' as const, label: 'Editor First' },
-                      { preset: 'ai-first' as const, label: 'AI First' },
+                      { preset: 'default' as const, label: t('settings.editorFirst') },
+                      { preset: 'ai-first' as const, label: t('settings.aiFirst') },
                     ].map(({ preset, label }) => {
                       const isActive = settings.ui.defaultLayoutPreset === preset;
                       return (
@@ -352,9 +373,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                 </div>
 
                 <div>
-                  <Label>Theme</Label>
+                  <Label>{t('settings.theme')}</Label>
                   <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
-                    Choose a color theme for the entire application
+                    {t('settings.themeDesc')}
                   </p>
                   {availableThemes.map((section) => (
                     <div key={section.category} className="mb-4">
@@ -466,7 +487,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       fontWeight: editorSubTab === 'general' ? '500' : 'normal',
                     }}
                   >
-                    General
+                    {t('settings.general')}
                   </button>
                   <button
                     type="button"
@@ -480,7 +501,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       fontWeight: editorSubTab === 'vim' ? '500' : 'normal',
                     }}
                   >
-                    Vim
+                    {t('settings.vim')}
                   </button>
                 </div>
 
@@ -498,9 +519,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       style={{ borderBottom: '1px solid var(--border-primary)' }}
                     >
                       <div>
-                        <Label className="mb-0">Format on Save</Label>
+                        <Label className="mb-0">{t('settings.formatOnSave')}</Label>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                          Automatically format OpenSCAD code when saving files
+                          {t('settings.formatOnSaveDesc')}
                         </p>
                       </div>
                       <Toggle
@@ -515,24 +536,24 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       className="p-4"
                       style={{ borderBottom: '1px solid var(--border-primary)' }}
                     >
-                      <Label>Indent Size</Label>
+                      <Label>{t('settings.indentSize')}</Label>
                       <Select
                         value={settings.editor.indentSize}
                         onChange={(e) =>
                           handleEditorSettingChange('indentSize', Number(e.target.value))
                         }
                       >
-                        <option value={2}>2 spaces</option>
-                        <option value={4}>4 spaces</option>
-                        <option value={8}>8 spaces</option>
+                        <option value={2}>{t('settings.indentSizeSpaces', { count: 2 })}</option>
+                        <option value={4}>{t('settings.indentSizeSpaces', { count: 4 })}</option>
+                        <option value={8}>{t('settings.indentSizeSpaces', { count: 8 })}</option>
                       </Select>
                     </div>
 
                     <div className="flex items-center justify-between p-4">
                       <div>
-                        <Label className="mb-0">Use Tabs</Label>
+                        <Label className="mb-0">{t('settings.useTabs')}</Label>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                          Use tab characters instead of spaces for indentation
+                          {t('settings.useTabsDesc')}
                         </p>
                       </div>
                       <Toggle
@@ -546,9 +567,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       style={{ borderBottom: '1px solid var(--border-primary)' }}
                     >
                       <div>
-                        <Label className="mb-0">Auto-Render on Idle</Label>
+                        <Label className="mb-0">{t('settings.autoRender')}</Label>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                          Automatically render preview after you stop typing
+                          {t('settings.autoRenderDesc')}
                         </p>
                       </div>
                       <Toggle
@@ -564,17 +585,17 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                         className="p-4"
                         style={{ borderBottom: '1px solid var(--border-primary)' }}
                       >
-                        <Label>Render Delay</Label>
+                        <Label>{t('settings.renderDelay')}</Label>
                         <Select
                           value={settings.editor.autoRenderDelayMs}
                           onChange={(e) =>
                             handleEditorSettingChange('autoRenderDelayMs', Number(e.target.value))
                           }
                         >
-                          <option value={300}>300ms (fast)</option>
-                          <option value={500}>500ms (default)</option>
-                          <option value={1000}>1 second</option>
-                          <option value={2000}>2 seconds</option>
+                          <option value={300}>{t('settings.renderDelayFast')}</option>
+                          <option value={500}>{t('settings.renderDelayDefault')}</option>
+                          <option value={1000}>{t('settings.renderDelay1s')}</option>
+                          <option value={2000}>{t('settings.renderDelay2s')}</option>
                         </Select>
                       </div>
                     )}
@@ -593,9 +614,9 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       }}
                     >
                       <div>
-                        <Label className="mb-0">Enable Vim Mode</Label>
+                        <Label className="mb-0">{t('settings.enableVim')}</Label>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                          Enable vim keybindings and modal editing in the editor
+                          {t('settings.enableVimDesc')}
                         </p>
                       </div>
                       <Toggle
@@ -614,7 +635,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                         }}
                       >
                         <div className="flex items-center justify-between">
-                          <Label className="mb-0">Vim Configuration</Label>
+                          <Label className="mb-0">{t('settings.vimConfig')}</Label>
                           <button
                             type="button"
                             onClick={() => setLocalVimConfig(getDefaultVimConfig())}
@@ -630,12 +651,11 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                               e.currentTarget.style.backgroundColor = 'transparent';
                             }}
                           >
-                            Reset to Defaults
+                            {t('settings.resetDefaults')}
                           </button>
                         </div>
                         <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          Customize vim keybindings using vim-style commands. Lines starting with #
-                          are comments.
+                          {t('settings.vimConfigDesc')}
                         </p>
                         <div
                           style={{
@@ -712,12 +732,13 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                         </div>
                         <div className="flex items-center justify-between pt-1">
                           <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                            Supported: <code style={{ color: 'var(--text-primary)' }}>map</code>,{' '}
+                            {t('settings.vimConfigSupported')}{' '}
+                            <code style={{ color: 'var(--text-primary)' }}>map</code>,{' '}
                             <code style={{ color: 'var(--text-primary)' }}>imap</code>,{' '}
                             <code style={{ color: 'var(--text-primary)' }}>nmap</code>,{' '}
                             <code style={{ color: 'var(--text-primary)' }}>vmap</code>
                             {' • '}
-                            Example:{' '}
+                            {t('settings.vimConfigExample')}{' '}
                             <code style={{ color: 'var(--text-primary)' }}>
                               map kj &lt;Esc&gt; insert
                             </code>
@@ -746,7 +767,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                                   : 'not-allowed',
                             }}
                           >
-                            Apply
+                            {t('settings.apply')}
                           </button>
                         </div>
                       </div>
@@ -759,120 +780,8 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
             {activeSection === 'ai' && (
               <div className="space-y-5">
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  Add your API keys to enable AI assistant features. Model selection is available in
-                  the chat interface.
+                  {t('settings.aiSettingsDesc')}
                 </p>
-
-                {/* Anthropic Section */}
-                <div
-                  className="rounded-lg p-4 space-y-3"
-                  style={{
-                    backgroundColor: 'var(--bg-primary)',
-                    border: '1px solid var(--border-primary)',
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    <Label className="mb-0">Anthropic API Key</Label>
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{
-                        backgroundColor: hasAnthropicKey
-                          ? 'rgba(133, 153, 0, 0.15)'
-                          : 'rgba(128, 128, 128, 0.1)',
-                        color: hasAnthropicKey ? 'var(--color-success)' : 'var(--text-tertiary)',
-                      }}
-                    >
-                      {hasAnthropicKey ? 'Configured' : 'Not configured'}
-                    </span>
-                  </div>
-                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    Required for Claude models. Your key is stored securely and never leaves your
-                    device.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        type={showKey && provider === 'anthropic' ? 'text' : 'password'}
-                        value={provider === 'anthropic' ? apiKey : ''}
-                        onChange={(e) => {
-                          setProvider('anthropic');
-                          setApiKey(e.target.value);
-                        }}
-                        onFocus={() => {
-                          setProvider('anthropic');
-                          if (provider !== 'anthropic') {
-                            setApiKey('');
-                            setShowKey(false);
-                          }
-                        }}
-                        placeholder="sk-ant-..."
-                        className="pr-20 font-mono text-sm"
-                        disabled={isLoading}
-                      />
-                      {provider === 'anthropic' && apiKey && !apiKey.startsWith('•') && (
-                        <button
-                          type="button"
-                          onClick={() => setShowKey(!showKey)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded transition-colors"
-                          style={{ color: 'var(--text-secondary)' }}
-                        >
-                          {showKey ? 'Hide' : 'Show'}
-                        </button>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProvider('anthropic');
-                        if (hasAnthropicKey) {
-                          handleClear();
-                        }
-                      }}
-                      disabled={isLoading || !hasAnthropicKey}
-                      className="flex items-center justify-center w-9 h-9 rounded-md transition-all duration-150 shrink-0"
-                      style={{
-                        backgroundColor: 'transparent',
-                        border: '1px solid var(--border-primary)',
-                        color:
-                          hasAnthropicKey && !isLoading
-                            ? 'var(--color-error)'
-                            : 'var(--text-tertiary)',
-                        opacity: hasAnthropicKey && !isLoading ? 1 : 0.4,
-                        cursor: hasAnthropicKey && !isLoading ? 'pointer' : 'not-allowed',
-                      }}
-                      title={hasAnthropicKey ? 'Remove API key' : 'No API key to remove'}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <title>Delete</title>
-                        <path
-                          d="M2 4h12M5.333 4V2.667a.667.667 0 01.667-.667h4a.667.667 0 01.667.667V4m2 0v9.333a.667.667 0 01-.667.667H4a.667.667 0 01-.667-.667V4h9.334z"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    Don't have a key?{' '}
-                    <a
-                      href="https://console.anthropic.com/settings/keys"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline"
-                      style={{ color: 'var(--accent-primary)' }}
-                    >
-                      Get one from Anthropic
-                    </a>
-                  </p>
-                </div>
 
                 {/* OpenAI Section */}
                 <div
@@ -883,7 +792,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <Label className="mb-0">OpenAI API Key</Label>
+                    <Label className="mb-0">{t('settings.openaiKey')}</Label>
                     <span
                       className="text-xs px-2 py-0.5 rounded-full font-medium"
                       style={{
@@ -893,52 +802,36 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                         color: hasOpenAIKey ? 'var(--color-success)' : 'var(--text-tertiary)',
                       }}
                     >
-                      {hasOpenAIKey ? 'Configured' : 'Not configured'}
+                      {hasOpenAIKey ? t('settings.configured') : t('settings.notConfigured')}
                     </span>
                   </div>
                   <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    Required for GPT models. Your key is stored securely and never leaves your
-                    device.
+                    {t('settings.openaiKeyDesc')}
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
                       <Input
-                        type={showKey && provider === 'openai' ? 'text' : 'password'}
-                        value={provider === 'openai' ? apiKey : ''}
-                        onChange={(e) => {
-                          setProvider('openai');
-                          setApiKey(e.target.value);
-                        }}
-                        onFocus={() => {
-                          setProvider('openai');
-                          if (provider !== 'openai') {
-                            setApiKey('');
-                            setShowKey(false);
-                          }
-                        }}
+                        type={showKey ? 'text' : 'password'}
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
                         placeholder="sk-..."
                         className="pr-20 font-mono text-sm"
                         disabled={isLoading}
                       />
-                      {provider === 'openai' && apiKey && !apiKey.startsWith('•') && (
+                      {apiKey && !apiKey.startsWith('•') && (
                         <button
                           type="button"
                           onClick={() => setShowKey(!showKey)}
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-2 py-1 rounded transition-colors"
                           style={{ color: 'var(--text-secondary)' }}
                         >
-                          {showKey ? 'Hide' : 'Show'}
+                          {showKey ? t('settings.hide') : t('settings.show')}
                         </button>
                       )}
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        setProvider('openai');
-                        if (hasOpenAIKey) {
-                          handleClear();
-                        }
-                      }}
+                      onClick={handleClear}
                       disabled={isLoading || !hasOpenAIKey}
                       className="flex items-center justify-center w-9 h-9 rounded-md transition-all duration-150 shrink-0"
                       style={{
@@ -951,7 +844,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                         opacity: hasOpenAIKey && !isLoading ? 1 : 0.4,
                         cursor: hasOpenAIKey && !isLoading ? 'pointer' : 'not-allowed',
                       }}
-                      title={hasOpenAIKey ? 'Remove API key' : 'No API key to remove'}
+                      title={hasOpenAIKey ? t('settings.remove') : t('settings.noKeyToRemove')}
                     >
                       <svg
                         width="14"
@@ -960,7 +853,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                       >
-                        <title>Delete</title>
+                        <title>{t('common.delete')}</title>
                         <path
                           d="M2 4h12M5.333 4V2.667a.667.667 0 01.667-.667h4a.667.667 0 01.667.667V4m2 0v9.333a.667.667 0 01-.667.667H4a.667.667 0 01-.667-.667V4h9.334z"
                           stroke="currentColor"
@@ -972,7 +865,7 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                     </button>
                   </div>
                   <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    Don't have a key?{' '}
+                    {t('settings.getKey')}{' '}
                     <a
                       href="https://platform.openai.com/api-keys"
                       target="_blank"
@@ -980,9 +873,53 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                       className="underline"
                       style={{ color: 'var(--accent-primary)' }}
                     >
-                      Get one from OpenAI
+                      {t('settings.getKeyLink')}
                     </a>
                   </p>
+                </div>
+
+                {/* OpenAI Base URL */}
+                <div
+                  className="rounded-lg p-4 space-y-3"
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-primary)',
+                  }}
+                >
+                  <Label className="mb-0">{t('settings.openaiBaseUrl')}</Label>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {t('settings.openaiBaseUrlDesc')}
+                  </p>
+                  <Input
+                    type="text"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder={t('settings.openaiBaseUrlPlaceholder')}
+                    className="font-mono text-sm"
+                    disabled={isLoading}
+                  />
+                </div>
+
+                {/* Custom Models */}
+                <div
+                  className="rounded-lg p-4 space-y-3"
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-primary)',
+                  }}
+                >
+                  <Label className="mb-0">{t('settings.customModels')}</Label>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {t('settings.customModelsDesc')}
+                  </p>
+                  <Input
+                    type="text"
+                    value={customModelsConfig}
+                    onChange={(e) => setCustomModelsConfig(e.target.value)}
+                    placeholder={t('settings.customModelsPlaceholder')}
+                    className="font-mono text-sm"
+                    disabled={isLoading}
+                  />
                 </div>
 
                 {error && (
@@ -1025,11 +962,11 @@ export function SettingsDialog({ isOpen, onClose, initialTab }: SettingsDialogPr
                 onClick={handleSave}
                 disabled={isLoading || !apiKey.trim() || apiKey.startsWith('•')}
               >
-                {isLoading ? 'Saving...' : 'Save Key'}
+                {isLoading ? t('settings.saving') : t('settings.save')}
               </Button>
             )}
             <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
-              {activeSection === 'ai' ? 'Cancel' : 'Close'}
+              {activeSection === 'ai' ? t('settings.cancel') : t('settings.close')}
             </Button>
           </div>
         </div>

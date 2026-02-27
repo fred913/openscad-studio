@@ -3,6 +3,7 @@ import App from './App';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { initFormatter } from './utils/formatter';
 import { initializePlatform } from './platform';
+import './i18n'; // Initialize i18n
 import './index.css';
 
 // Initialize tree-sitter WASM as early as possible

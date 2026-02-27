@@ -5,12 +5,13 @@ import { useSyncExternalStore } from 'react';
 // ============================================================================
 
 const STORAGE_KEYS = {
-  anthropic: 'openscad_studio_anthropic_api_key',
   openai: 'openscad_studio_openai_api_key',
+  openaiBaseUrl: 'openscad_studio_openai_base_url',
+  customModels: 'openscad_studio_custom_models',
   model: 'openscad_studio_ai_model',
 } as const;
 
-export type AiProvider = 'anthropic' | 'openai';
+export type AiProvider = 'openai';
 
 // ============================================================================
 // API Key Storage (localStorage-based)
@@ -37,9 +38,60 @@ export function hasApiKeyForProvider(provider: AiProvider): boolean {
 
 export function getAvailableProviders(): AiProvider[] {
   const providers: AiProvider[] = [];
-  if (hasApiKeyForProvider('anthropic')) providers.push('anthropic');
   if (hasApiKeyForProvider('openai')) providers.push('openai');
   return providers;
+}
+
+// ============================================================================
+// OpenAI Base URL Storage
+// ============================================================================
+
+export function setOpenAIBaseUrl(url: string): void {
+  if (url.trim()) {
+    localStorage.setItem(STORAGE_KEYS.openaiBaseUrl, url);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.openaiBaseUrl);
+  }
+  notify();
+}
+
+export function getOpenAIBaseUrl(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.openaiBaseUrl);
+}
+
+// ============================================================================
+// Custom Models Configuration Storage
+// ============================================================================
+
+export function setCustomModels(config: string): void {
+  if (config.trim()) {
+    localStorage.setItem(STORAGE_KEYS.customModels, config);
+  } else {
+    localStorage.removeItem(STORAGE_KEYS.customModels);
+  }
+  notify();
+}
+
+export function getCustomModels(): string | null {
+  return localStorage.getItem(STORAGE_KEYS.customModels);
+}
+
+/**
+ * Parse custom models config string into model array
+ * Format: "model-id=Display Name,model-id2=Display Name 2"
+ */
+export function parseCustomModels(config: string | null): Array<{ id: string; display_name: string }> {
+  if (!config || !config.trim()) return [];
+  
+  try {
+    return config.split(',').map(pair => {
+      const [id, display_name] = pair.split('=').map(s => s.trim());
+      if (!id || !display_name) throw new Error('Invalid format');
+      return { id, display_name };
+    }).filter(m => m.id && m.display_name);
+  } catch {
+    return [];
+  }
 }
 
 // ============================================================================
@@ -47,7 +99,7 @@ export function getAvailableProviders(): AiProvider[] {
 // ============================================================================
 
 export function getStoredModel(): string {
-  return localStorage.getItem(STORAGE_KEYS.model) || 'claude-sonnet-4-5-20250929';
+  return localStorage.getItem(STORAGE_KEYS.model) || 'gpt-4o';
 }
 
 export function setStoredModel(model: string): void {
@@ -59,18 +111,8 @@ export function setStoredModel(model: string): void {
 // ============================================================================
 
 export function getProviderFromModel(modelId: string): AiProvider {
-  if (modelId.startsWith('claude') || modelId.startsWith('anthropic')) {
-    return 'anthropic';
-  }
-  if (
-    modelId.startsWith('gpt') ||
-    modelId.startsWith('o1') ||
-    modelId.startsWith('o3') ||
-    modelId.startsWith('chatgpt')
-  ) {
-    return 'openai';
-  }
-  return 'anthropic'; // Default
+  // All models are OpenAI now (or OpenAI-compatible)
+  return 'openai';
 }
 
 // ============================================================================
@@ -84,7 +126,7 @@ const listeners: Set<() => void> = new Set();
 
 function notify() {
   // Recompute status
-  status = hasApiKeyForProvider('anthropic') || hasApiKeyForProvider('openai');
+  status = hasApiKeyForProvider('openai');
   for (const listener of listeners) {
     listener();
   }
@@ -100,7 +142,7 @@ function getSnapshot(): ApiKeyStatus {
 }
 
 // Initialize status
-status = hasApiKeyForProvider('anthropic') || hasApiKeyForProvider('openai');
+status = hasApiKeyForProvider('openai');
 
 export function invalidateApiKeyStatus() {
   notify();

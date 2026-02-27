@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
-import { Button } from './ui';
-import { useHasApiKey } from '../stores/apiKeyStore';
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { useHasApiKey } from '../stores/apiKeyStore'
+import { Button } from './ui'
 
 interface RecentFile {
   path: string;
@@ -17,14 +18,6 @@ interface WelcomeScreenProps {
   showRecentFiles?: boolean;
 }
 
-const EXAMPLE_PROMPTS = [
-  'Create a 3D printable mini lamp',
-  'Design a parametric phone stand',
-  'Make a custom gear with 20 teeth',
-  'Create a simple mounting bracket',
-  'Design a pencil holder with holes',
-];
-
 const RECENT_FILES_KEY = 'openscad-studio-recent-files';
 
 export function WelcomeScreen({
@@ -35,10 +28,18 @@ export function WelcomeScreen({
   onOpenSettings,
   showRecentFiles = true,
 }: WelcomeScreenProps) {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState('');
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const hasApiKey = useHasApiKey();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const examplePrompts = [
+    t('welcome.examplePromptMiniLamp'),
+    t('welcome.examplePromptPhoneStand'),
+    t('welcome.examplePromptGear'),
+    t('welcome.examplePromptBracket'),
+    t('welcome.examplePromptPencilHolder'),
+  ];
 
   // Load recent files from localStorage
   useEffect(() => {
@@ -78,7 +79,7 @@ export function WelcomeScreen({
           className="text-4xl font-bold text-center mb-8"
           style={{ color: 'var(--text-primary)' }}
         >
-          What do you want to create?
+          {t('welcome.whatDoYouWantToCreate')}
         </h1>
 
         {/* Main input — only show when API key is configured */}
@@ -90,7 +91,7 @@ export function WelcomeScreen({
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Describe your OpenSCAD project..."
+                placeholder={t('welcome.describeProjectPlaceholder')}
                 className="w-full rounded-lg px-4 py-3 resize-none focus:outline-none focus:ring-2 text-base"
                 style={{
                   backgroundColor: 'var(--bg-elevated)',
@@ -111,7 +112,7 @@ export function WelcomeScreen({
                     backgroundColor: 'var(--accent-primary)',
                     color: 'var(--text-inverse)',
                   }}
-                  title="Start with AI (⌘↵)"
+                  title={t('welcome.startWithAiShortcut')}
                 >
                   <svg
                     width="20"
@@ -128,7 +129,8 @@ export function WelcomeScreen({
             </div>
             {prompt.trim() && (
               <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                Press <span className="font-medium">⌘↵</span> to start with AI
+                {t('welcome.pressShortcutToStartWithAi')}{' '}
+                <span className="font-medium">⌘↵</span>
               </div>
             )}
           </div>
@@ -141,7 +143,7 @@ export function WelcomeScreen({
             }}
           >
             <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
-              Set up an API key to use the AI assistant
+              {t('welcome.setupApiKey')}
             </p>
             <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
               <a
@@ -153,9 +155,9 @@ export function WelcomeScreen({
                 className="underline hover:no-underline"
                 style={{ color: 'var(--accent-primary)' }}
               >
-                Open Settings
+                {t('welcome.openSettings')}
               </a>{' '}
-              to configure (⌘,)
+              {t('welcome.toConfigureShortcut')}
             </p>
           </div>
         ) : null}
@@ -163,10 +165,10 @@ export function WelcomeScreen({
         {/* Example prompts */}
         <div className="space-y-3">
           <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-            Try an example:
+            {t('welcome.tryAnExample')}
           </h3>
           <div className="flex flex-wrap gap-2">
-            {EXAMPLE_PROMPTS.map((example, idx) => (
+            {examplePrompts.map((example, idx) => (
               <button
                 key={idx}
                 onClick={() => hasApiKey && onStartWithPrompt(example)}
@@ -179,7 +181,7 @@ export function WelcomeScreen({
                   opacity: hasApiKey ? 1 : 0.5,
                   cursor: hasApiKey ? 'pointer' : 'not-allowed',
                 }}
-                title={!hasApiKey ? 'Configure an API key in Settings to use AI' : example}
+                title={!hasApiKey ? t('welcome.configureApiKeyInSettingsToUseAi') : example}
               >
                 {example}
               </button>
@@ -190,7 +192,7 @@ export function WelcomeScreen({
         {showRecentFiles && recentFiles.length > 0 && (
           <div className="space-y-3 pt-4">
             <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-              Recent files:
+              {t('welcome.recentFiles')}
             </h3>
             <div className="space-y-2">
               {recentFiles.map((file) => (
@@ -240,11 +242,11 @@ export function WelcomeScreen({
         <div className="flex justify-center gap-4 pt-4">
           {onOpenFile && (
             <Button variant="secondary" onClick={onOpenFile} className="text-sm">
-              Open File
+              {t('welcome.openFile')}
             </Button>
           )}
           <Button variant="ghost" onClick={onStartManually} className="text-sm">
-            Start with empty project →
+            {t('welcome.startWithEmptyProject')}
           </Button>
         </div>
       </div>

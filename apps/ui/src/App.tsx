@@ -1,44 +1,40 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { DockviewReact } from 'dockview';
-import type { DockviewReadyEvent } from 'dockview';
-import 'dockview/dist/styles/dockview.css';
-import { ExportDialog } from './components/ExportDialog';
-import type { AiPromptPanelRef } from './components/AiPromptPanel';
-import { SettingsDialog, type SettingsSection } from './components/SettingsDialog';
-import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen';
-import { NuxLayoutPicker } from './components/NuxLayoutPicker';
-import { TabBar, type Tab } from './components/TabBar';
-import { WebMenuBar } from './components/WebMenuBar';
-import { EditableFileName } from './components/EditableFileName';
-import { Button } from './components/ui';
-import { panelComponents, tabComponents, WorkspaceTab } from './components/panels/PanelComponents';
-import { WorkspaceProvider } from './contexts/WorkspaceContext';
-import type { WorkspaceState } from './contexts/WorkspaceContext';
+import type { DockviewReadyEvent } from 'dockview'
+import { DockviewReact } from 'dockview'
+import 'dockview/dist/styles/dockview.css'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { TbBox, TbDownload, TbRuler2, TbSettings } from 'react-icons/tb'
+import { Toaster, toast } from 'sonner'
+import type { AiPromptPanelRef } from './components/AiPromptPanel'
+import { EditableFileName } from './components/EditableFileName'
+import { ExportDialog } from './components/ExportDialog'
+import { NuxLayoutPicker } from './components/NuxLayoutPicker'
+import { WorkspaceTab, panelComponents, tabComponents } from './components/panels/PanelComponents'
+import { SettingsDialog, type SettingsSection } from './components/SettingsDialog'
+import { TabBar, type Tab } from './components/TabBar'
+import { Button } from './components/ui'
+import { WebMenuBar } from './components/WebMenuBar'
+import { WelcomeScreen, addToRecentFiles } from './components/WelcomeScreen'
+import type { WorkspaceState } from './contexts/WorkspaceContext'
+import { WorkspaceProvider } from './contexts/WorkspaceContext'
+import { useAiAgent } from './hooks/useAiAgent'
+import { useHistory } from './hooks/useHistory'
+import { useOpenScad } from './hooks/useOpenScad'
+import { eventBus, getPlatform, type ExportFormat } from './platform'
+import { RenderService } from './services/renderService'
 import {
-  setDockviewApi,
-  getDockviewApi,
   addPresetPanels,
-  saveLayout,
   clearSavedLayout,
-} from './stores/layoutStore';
-import { useOpenScad } from './hooks/useOpenScad';
-import { useAiAgent } from './hooks/useAiAgent';
-import { useHistory } from './hooks/useHistory';
-import { getPlatform, eventBus, type ExportFormat } from './platform';
-import { RenderService } from './services/renderService';
-import { useSettings, loadSettings, updateSetting } from './stores/settingsStore';
-import { formatOpenScadCode } from './utils/formatter';
-import { TbSettings, TbBox, TbRuler2, TbDownload } from 'react-icons/tb';
-import { Toaster, toast } from 'sonner';
+  getDockviewApi,
+  saveLayout,
+  setDockviewApi,
+} from './stores/layoutStore'
+import { loadSettings, updateSetting, useSettings } from './stores/settingsStore'
+import { formatOpenScadCode } from './utils/formatter'
 
 // Helper to generate unique IDs for tabs
 function generateId(): string {
   return Math.random().toString(36).substring(2, 11);
-}
-
-// Helper to generate unique untitled names
-function generateUntitledName(): string {
-  return `Untitled`;
 }
 
 const RELEASE_VERSION = '0.7.1';
@@ -47,6 +43,7 @@ const RELEASE_BASE = `https://github.com/zacharyfmarion/openscad-studio/releases
 type MacArch = 'aarch64' | 'x64';
 
 function DownloadForMacLink() {
+  const { t } = useTranslation();
   const [arch, setArch] = useState<MacArch>('aarch64');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -102,17 +99,17 @@ function DownloadForMacLink() {
           href={dmgUrl}
           className="flex items-center gap-1 text-xs px-2 py-1 rounded-l transition-colors"
           style={{ color: 'var(--text-secondary)' }}
-          title={`Download for macOS (${label})`}
+          title={t('app.downloadForMacTitle', { arch: label })}
         >
           <TbDownload size={13} />
-          <span>Download for Mac</span>
+          <span>{t('app.downloadForMac')}</span>
         </a>
         <button
           type="button"
           onClick={() => setShowDropdown((v) => !v)}
           className="text-xs px-1 py-1 rounded-r transition-colors"
           style={{ color: 'var(--text-tertiary)' }}
-          title="Other architectures"
+          title={t('app.otherArchitectures')}
         >
           ▾
         </button>
@@ -131,7 +128,7 @@ function DownloadForMacLink() {
             style={{ color: 'var(--text-primary)' }}
             onClick={() => setShowDropdown(false)}
           >
-            macOS ({label}) ✓
+            {t('app.macosArchOptionSelected', { arch: label })}
           </a>
           <a
             href={otherDmgUrl}
@@ -139,7 +136,7 @@ function DownloadForMacLink() {
             style={{ color: 'var(--text-secondary)' }}
             onClick={() => setShowDropdown(false)}
           >
-            macOS ({otherLabel})
+            {t('app.macosArchOption', { arch: otherLabel })}
           </a>
         </div>
       )}
@@ -148,13 +145,16 @@ function DownloadForMacLink() {
 }
 
 function App() {
+  const { t } = useTranslation();
+  const defaultCodeTemplate = `${t('app.defaultCodeComment')}\ncube([10, 10, 10]);`;
+  
   // Tab state
   const initialTab: Tab = {
     id: generateId(),
     filePath: null,
-    name: generateUntitledName(),
-    content: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
-    savedContent: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
+    name: t('editor.untitled'),
+    content: defaultCodeTemplate,
+    savedContent: defaultCodeTemplate,
     isDirty: false,
   };
   const [tabs, setTabs] = useState<Tab[]>([initialTab]);
@@ -243,9 +243,9 @@ function App() {
   const createNewTab = useCallback(
     (filePath?: string | null, content?: string, name?: string): string => {
       const newId = generateId();
-      const defaultContent = '// Type your OpenSCAD code here\ncube([10, 10, 10]);';
+      const defaultContent = defaultCodeTemplate;
       const tabContent = content || defaultContent;
-      const tabName = name || generateUntitledName();
+      const tabName = name || t('editor.untitled');
       const newTab: Tab = {
         id: newId,
         filePath: filePath || null,
@@ -261,7 +261,7 @@ function App() {
 
       return newId;
     },
-    [updateSource]
+    [defaultCodeTemplate, t, updateSource]
   );
 
   const switchingRef = useRef(false);
@@ -297,23 +297,23 @@ function App() {
 
       if (tab.isDirty) {
         const platform = getPlatform();
-        const wantsToSave = await platform.ask(`Save changes to ${tab.name}?`, {
-          title: 'Unsaved Changes',
+        const wantsToSave = await platform.ask(t('app.saveChangesTitle', { name: tab.name }), {
+          title: t('app.unsavedChanges'),
           kind: 'warning',
-          okLabel: 'Save',
-          cancelLabel: "Don't Save",
+          okLabel: t('common.save'),
+          cancelLabel: t('common.dontSave'),
         });
 
         if (wantsToSave) {
           return;
         } else {
           const confirmDiscard = await platform.confirm(
-            'Are you sure you want to discard your changes?',
+            t('app.discardChangesPrompt'),
             {
-              title: 'Discard Changes',
+              title: t('app.discardChanges'),
               kind: 'warning',
-              okLabel: 'Discard',
-              cancelLabel: 'Cancel',
+              okLabel: t('common.discard'),
+              cancelLabel: t('common.cancel'),
             }
           );
           if (!confirmDiscard) return;
@@ -325,13 +325,13 @@ function App() {
       if (filtered.length === 0) {
         setShowWelcome(true);
         const newId = generateId();
-        const tabName = generateUntitledName();
+        const tabName = t('editor.untitled');
         const newTab: Tab = {
           id: newId,
           filePath: null,
           name: tabName,
-          content: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
-          savedContent: '// Type your OpenSCAD code here\ncube([10, 10, 10]);',
+          content: defaultCodeTemplate,
+          savedContent: defaultCodeTemplate,
           isDirty: false,
         };
         setTabs([newTab]);
@@ -350,7 +350,7 @@ function App() {
         setTabs(filtered);
       }
     },
-    [tabs, activeTabId, updateSource]
+    [activeTabId, defaultCodeTemplate, t, tabs, updateSource]
   );
 
   const updateTabContent = useCallback((id: string, content: string) => {
@@ -542,7 +542,7 @@ function App() {
         }
 
         let savePath: string | null;
-        const suggestedName = currentTab.name || 'untitled';
+        const suggestedName = currentTab.name || t('editor.untitled');
         if (promptForPath) {
           savePath = await platform.fileSaveAs(currentSource, filters, suggestedName);
         } else {
@@ -587,11 +587,11 @@ function App() {
       } catch (err) {
         console.error('[saveFile] Save failed:', err);
         const errorMsg = err instanceof Error ? err.message : String(err);
-        toast.error(`Failed to save file: ${errorMsg}`);
+        toast.error(t('app.saveFailed', { error: errorMsg }));
         return false;
       }
     },
-    [updateSource]
+    [t, updateSource]
   );
 
   // Handle starting with AI prompt from welcome screen
@@ -636,7 +636,7 @@ function App() {
         // but we keep the interface for compatibility
         const platform = getPlatform();
         if (!platform.capabilities.hasFileSystem) {
-          toast.error('Cannot open recent files in web mode');
+          toast.error(t('app.cannotOpenRecentWeb'));
           return;
         }
 
@@ -675,10 +675,10 @@ function App() {
         }
       } catch (err) {
         console.error('Failed to open recent file:', err);
-        toast.error(`Failed to open file: ${err}`);
+        toast.error(t('app.openFailed', { error: String(err) }));
       }
     },
-    [tabs, showWelcome, switchTab, createNewTab, updateSource]
+    [createNewTab, showWelcome, switchTab, t, tabs, updateSource]
   );
 
   const handleOpenFile = useCallback(async () => {
@@ -729,9 +729,9 @@ function App() {
       }
     } catch (err) {
       console.error('Failed to open file:', err);
-      toast.error(`Failed to open file: ${err}`);
+      toast.error(t('app.openFailed', { error: String(err) }));
     }
-  }, [tabs, showWelcome, switchTab, createNewTab, updateSource]);
+  }, [createNewTab, showWelcome, switchTab, t, tabs, updateSource]);
 
   // Helper function to check for unsaved changes before destructive operations
   // Returns: true if ok to proceed, false if user wants to cancel
@@ -742,23 +742,23 @@ function App() {
 
     const platform = getPlatform();
 
-    const wantsToSave = await platform.ask('Do you want to save the changes you made?', {
-      title: 'Unsaved Changes',
+    const wantsToSave = await platform.ask(t('app.saveChangesPrompt'), {
+      title: t('app.unsavedChanges'),
       kind: 'warning',
-      okLabel: 'Save',
-      cancelLabel: "Don't Save",
+      okLabel: t('common.save'),
+      cancelLabel: t('common.dontSave'),
     });
 
     if (wantsToSave) {
       return await saveFile(false);
     } else {
       const confirmDiscard = await platform.confirm(
-        'Are you sure you want to discard your changes?',
+        t('app.discardChangesPrompt'),
         {
-          title: 'Discard Changes',
+          title: t('app.discardChanges'),
           kind: 'warning',
-          okLabel: 'Discard',
-          cancelLabel: 'Cancel',
+          okLabel: t('common.discard'),
+          cancelLabel: t('common.cancel'),
         }
       );
       return confirmDiscard;
@@ -811,7 +811,7 @@ function App() {
           }
         } catch (err) {
           console.error('Open failed:', err);
-          toast.error(`Failed to open file: ${err}`);
+          toast.error(t('app.openFailed', { error: String(err) }));
         }
       })
     );
@@ -848,10 +848,10 @@ function App() {
           await getPlatform().fileExport(exportBytes, `export.${formatInfo.ext}`, [
             { name: formatInfo.label, extensions: [formatInfo.ext] },
           ]);
-          toast.success('Exported successfully');
+          toast.success(t('app.exportSuccess'));
         } catch (err) {
           console.error('Export failed:', err);
-          toast.error(`Export failed: ${err}`);
+          toast.error(t('app.exportFailed', { error: String(err) }));
         }
       })
     );
@@ -878,8 +878,8 @@ function App() {
   useEffect(() => {
     const fileName = activeTab.name;
     const dirtyIndicator = activeTab.isDirty ? '\u2022 ' : '';
-    getPlatform().setWindowTitle(`${dirtyIndicator}${fileName} - OpenSCAD Studio`);
-  }, [activeTab]);
+    getPlatform().setWindowTitle(`${dirtyIndicator}${fileName} - ${t('app.windowTitle')}`);
+  }, [activeTab, t]);
 
   useEffect(() => {
     const platform = getPlatform();
@@ -1150,7 +1150,7 @@ function App() {
                   borderTopColor: 'var(--accent-primary)',
                 }}
               />
-              <span>Rendering</span>
+              <span>{t('app.rendering')}</span>
             </div>
           )}
 
@@ -1165,12 +1165,12 @@ function App() {
             {dimensionMode === '2d' ? (
               <>
                 <TbRuler2 size={12} />
-                <span className="font-medium">2D</span>
+                <span className="font-medium">{t('app.2d')}</span>
               </>
             ) : (
               <>
                 <TbBox size={12} />
-                <span className="font-medium">3D</span>
+                <span className="font-medium">{t('app.3d')}</span>
               </>
             )}
           </div>
@@ -1185,7 +1185,7 @@ function App() {
             disabled={isRendering || !ready}
             className="text-xs px-2 py-1"
           >
-            Render (⌘↵)
+            {t('app.render')}
           </Button>
           <Button
             variant="secondary"
@@ -1193,7 +1193,7 @@ function App() {
             disabled={isRendering || !ready}
             className="text-xs px-2 py-1"
           >
-            Export
+            {t('app.export')}
           </Button>
 
           <div
@@ -1208,7 +1208,7 @@ function App() {
               backgroundColor: 'transparent',
               color: 'var(--text-secondary)',
             }}
-            title="Settings (⌘,)"
+            title={t('app.settings')}
           >
             <TbSettings size={16} />
           </button>

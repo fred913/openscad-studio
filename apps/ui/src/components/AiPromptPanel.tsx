@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
-import { toast } from 'sonner';
-import type { Message, ToolCallMessage } from '../hooks/useAiAgent';
-import { Button } from './ui';
-import { MarkdownMessage } from './MarkdownMessage';
-import { ModelSelector } from './ModelSelector';
-import { useHistory } from '../hooks/useHistory';
-import { getPlatform } from '../platform';
-import { useHasApiKey } from '../stores/apiKeyStore';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import type { Message, ToolCallMessage } from '../hooks/useAiAgent'
+import { useHistory } from '../hooks/useHistory'
+import { getPlatform } from '../platform'
+import { useHasApiKey } from '../stores/apiKeyStore'
+import { MarkdownMessage } from './MarkdownMessage'
+import { ModelSelector } from './ModelSelector'
+import { Button } from './ui'
 
 function getImageDataUrlFromResult(result: unknown): string | null {
   if (!result) return null;
@@ -67,6 +68,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
     },
     ref
   ) => {
+    const { t } = useTranslation();
     const hasApiKey = useHasApiKey();
     const [prompt, setPrompt] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -120,12 +122,12 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
         // Only show warning if there are conversation turns after this one
         if (hasLaterMessages) {
           const shouldProceed = await getPlatform().confirm(
-            'This will restore the code to before this turn and remove all subsequent conversation. Continue?',
+            t('ai.restoreConfirmMessage'),
             {
-              title: 'Restore Checkpoint',
+              title: t('ai.restoreCheckpointTitle'),
               kind: 'warning',
-              okLabel: 'Restore',
-              cancelLabel: 'Cancel',
+              okLabel: t('ai.restore'),
+              cancelLabel: t('common.cancel'),
             }
           );
 
@@ -143,7 +145,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
         }
       } catch (err) {
         console.error('[AiPromptPanel] Failed to restore checkpoint:', err);
-        toast.error(`Failed to restore checkpoint: ${err}`);
+        toast.error(t('ai.restoreFailed', { error: String(err) }));
       }
     };
 
@@ -162,7 +164,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
         >
           <div className="text-center max-w-xs">
             <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
-              Add an API key to get started
+              {t('ai.addApiKeyToStart')}
             </p>
             <button
               type="button"
@@ -175,7 +177,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                 border: 'none',
               }}
             >
-              Open Settings
+              {t('ai.openSettings')}
             </button>
           </div>
         </div>
@@ -197,10 +199,10 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
               size="sm"
               variant="secondary"
               onClick={onNewConversation}
-              title="Start new conversation"
+              title={t('ai.startNewConversation')}
               disabled={isStreaming}
             >
-              + New
+              {t('ai.newConversationButton')}
             </Button>
           )}
         </div>
@@ -216,10 +218,10 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                 className="text-lg font-semibold mb-2"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                No conversation yet
+                {t('ai.noConversationYet')}
               </div>
               <div className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                Describe the changes you want to make below
+                {t('ai.describeChangesBelow')}
               </div>
             </div>
           </div>
@@ -246,7 +248,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                         }}
                       >
                         <div className="text-xs mb-1" style={{ opacity: 0.8 }}>
-                          You
+                          {t('ai.you')}
                         </div>
                         <div className="text-sm whitespace-pre-wrap font-mono">
                           {message.content}
@@ -264,9 +266,9 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                             backgroundColor: 'transparent',
                             border: '1px solid var(--border-secondary)',
                           }}
-                          title="Restore code to before this turn"
+                          title={t('ai.restoreToBeforeThisTurnTitle')}
                         >
-                          ↶ Restore to before this turn
+                          {t('ai.restoreToBeforeThisTurn')}
                         </button>
                       </div>
                     )}
@@ -287,7 +289,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                       }}
                     >
                       <div className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
-                        AI
+                        {t('ai.assistantLabel')}
                       </div>
                       <div className="text-sm">
                         <MarkdownMessage content={message.content} />
@@ -354,7 +356,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                         </span>
                         {message.completed && (
                           <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                            completed
+                            {t('ai.completed')}
                           </span>
                         )}
                       </div>
@@ -362,7 +364,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                         <div className="mt-2">
                           <img
                             src={imageDataUrl}
-                            alt="Preview screenshot"
+                            alt={t('ai.previewScreenshotAlt')}
                             className="max-w-full rounded border"
                             style={{
                               maxHeight: '300px',
@@ -439,7 +441,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                           </span>
                           {tool.result ? (
                             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              completed
+                              {t('ai.completed')}
                             </span>
                           ) : null}
                         </div>
@@ -447,7 +449,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                           <div className="mt-2">
                             <img
                               src={imageDataUrl}
-                              alt="Preview screenshot"
+                              alt={t('ai.previewScreenshotAlt')}
                               className="max-w-full rounded border"
                               style={{
                                 maxHeight: '300px',
@@ -477,7 +479,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                   }}
                 >
                   <div className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
-                    AI
+                    {t('ai.assistantLabel')}
                   </div>
                   <div className="text-sm">
                     <MarkdownMessage content={streamingResponse} />
@@ -526,7 +528,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                         />
                       </div>
                       <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                        Thinking...
+                        {t('ai.thinking')}
                       </span>
                     </div>
                   </div>
@@ -542,7 +544,7 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe the changes you want to make..."
+            placeholder={t('ai.describeChangesPlaceholder')}
             className="flex-1 rounded border px-3 py-2 resize-none focus:outline-none focus:ring-2 text-sm"
             style={{
               backgroundColor: 'var(--bg-elevated)',
@@ -554,20 +556,20 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
           />
           {isStreaming ? (
             <Button variant="danger" onClick={onCancel}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           ) : (
             <Button
               variant="primary"
               onClick={handleSubmit}
               disabled={!prompt.trim()}
-              title="Submit prompt (↵)"
+              title={t('ai.submitPromptShortcut')}
               style={{
                 opacity: !prompt.trim() ? 0.5 : 1,
                 cursor: !prompt.trim() ? 'not-allowed' : 'pointer',
               }}
             >
-              Send
+              {t('ai.send')}
             </Button>
           )}
         </div>
@@ -578,10 +580,10 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
           style={{ color: 'var(--text-tertiary)', borderTop: '1px solid var(--border-primary)' }}
         >
           <div>
-            <span className="font-medium">↵</span> to submit •{' '}
-            <span className="font-medium">⇧↵</span> for newline •{' '}
-            <span className="font-medium">Esc</span> to cancel •{' '}
-            <span className="font-medium">⌘K</span> to focus prompt
+            <span className="font-medium">↵</span> {t('ai.toSubmit')} •{' '}
+            <span className="font-medium">⇧↵</span> {t('ai.forNewline')} •{' '}
+            <span className="font-medium">Esc</span> {t('ai.toCancel')} •{' '}
+            <span className="font-medium">⌘K</span> {t('ai.toFocusPrompt')}
           </div>
           <div className="flex items-center gap-2">
             <ModelSelector

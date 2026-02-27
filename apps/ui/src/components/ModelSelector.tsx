@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useModels } from '../hooks/useModels';
 import { Select } from './ui';
 
@@ -14,16 +15,17 @@ export function ModelSelector({
   onChange,
   disabled,
 }: ModelSelectorProps) {
+  const { t } = useTranslation();
   const { groupedByProvider, isLoading, fromCache, refreshModels } = useModels(availableProviders);
 
-  const { anthropic: anthropicModels, openai: openaiModels } = groupedByProvider;
-  const hasModels = anthropicModels.length > 0 || openaiModels.length > 0;
+  const { openai: openaiModels } = groupedByProvider;
+  const hasModels = openaiModels.length > 0;
 
   // If no providers available, show nothing or disabled state
   if (!hasModels && !isLoading) {
     return (
       <span className="text-xs" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }}>
-        No API keys
+        {t('model.noApiKeys')}
       </span>
     );
   }
@@ -45,29 +47,16 @@ export function ModelSelector({
           borderRadius: '4px',
         }}
       >
-        {anthropicModels.length > 0 && (
-          <optgroup label="Anthropic">
-            {anthropicModels.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.display_name}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {openaiModels.length > 0 && (
-          <optgroup label="OpenAI">
-            {openaiModels.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.display_name}
-              </option>
-            ))}
-          </optgroup>
-        )}
+        {openaiModels.map((model) => (
+          <option key={model.id} value={model.id}>
+            {model.display_name}
+          </option>
+        ))}
       </Select>
       <button
         onClick={() => refreshModels()}
         disabled={isLoading}
-        title={fromCache ? 'Refresh models (currently cached)' : 'Refresh models'}
+        title={fromCache ? t('model.refreshModelsCached') : t('model.refreshModels')}
         style={{
           background: 'none',
           border: 'none',

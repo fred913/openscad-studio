@@ -1,11 +1,11 @@
 import { tool } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { eventBus, historyService } from '../platform';
 import { RenderService } from './renderService';
 import { captureOffscreen, type CaptureOptions } from './offscreenRenderer';
 import type { AiProvider } from '../stores/apiKeyStore';
+import { getOpenAIBaseUrl } from '../stores/apiKeyStore';
 
 export interface AiToolCallbacks {
   getCurrentCode: () => string;
@@ -83,14 +83,14 @@ You are an expert OpenSCAD assistant helping users design and modify 3D models. 
 `;
 
 export function createModel(provider: AiProvider, apiKey: string, modelId: string) {
-  if (provider === 'anthropic') {
-    const anthropic = createAnthropic({
-      apiKey,
-      headers: { 'anthropic-dangerous-direct-browser-access': 'true' },
-    });
-    return anthropic(modelId);
+  const baseUrl = getOpenAIBaseUrl();
+  const config: { apiKey: string; baseURL?: string } = { apiKey };
+  
+  if (baseUrl && baseUrl.trim()) {
+    config.baseURL = baseUrl.trim();
   }
-  const openai = createOpenAI({ apiKey });
+  
+  const openai = createOpenAI(config);
   return openai(modelId);
 }
 

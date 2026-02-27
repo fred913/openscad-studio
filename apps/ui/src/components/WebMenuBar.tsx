@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { eventBus } from '../platform';
 import './WebMenuBar.css';
 
@@ -12,30 +13,30 @@ function modKey(): string {
   return isMac ? '\u2318' : 'Ctrl';
 }
 
-function getMenuBarDef(): MenuDef[] {
+function getMenuBarDef(t: (key: string) => string): MenuDef[] {
   const mod = modKey();
 
   return [
     {
-      label: 'File',
+      label: t('menu.file'),
       items: [
-        { type: 'action', id: 'file.new', label: 'New File', shortcut: `${mod}+N` },
-        { type: 'action', id: 'file.open', label: 'Open File...', shortcut: `${mod}+O` },
-        { type: 'action', id: 'file.save', label: 'Save', shortcut: `${mod}+S` },
-        { type: 'action', id: 'file.saveAs', label: 'Save As...', shortcut: `${mod}+\u21E7+S` },
+        { type: 'action', id: 'file.new', label: t('menu.new'), shortcut: `${mod}+N` },
+        { type: 'action', id: 'file.open', label: t('menu.open'), shortcut: `${mod}+O` },
+        { type: 'action', id: 'file.save', label: t('menu.save'), shortcut: `${mod}+S` },
+        { type: 'action', id: 'file.saveAs', label: t('menu.saveAs'), shortcut: `${mod}+\u21E7+S` },
         { type: 'separator' },
-        { type: 'action', id: 'file.export', label: 'Export...' },
+        { type: 'action', id: 'file.export', label: t('menu.export') },
         { type: 'separator' },
-        { type: 'action', id: 'file.settings', label: 'Settings', shortcut: `${mod}+,` },
+        { type: 'action', id: 'file.settings', label: t('settings.title'), shortcut: `${mod}+,` },
       ],
     },
     {
-      label: 'Edit',
+      label: t('menu.edit'),
       items: [
-        { type: 'action', id: 'edit.undo', label: 'Undo', shortcut: `${mod}+Z` },
-        { type: 'action', id: 'edit.redo', label: 'Redo', shortcut: `${mod}+\u21E7+Z` },
+        { type: 'action', id: 'edit.undo', label: t('menu.undo'), shortcut: `${mod}+Z` },
+        { type: 'action', id: 'edit.redo', label: t('menu.redo'), shortcut: `${mod}+\u21E7+Z` },
         { type: 'separator' },
-        { type: 'action', id: 'edit.render', label: 'Render', shortcut: `${mod}+\u23CE` },
+        { type: 'action', id: 'edit.render', label: t('preview.render'), shortcut: `${mod}+\u23CE` },
       ],
     },
   ];
@@ -88,9 +89,10 @@ interface WebMenuBarProps {
 }
 
 export function WebMenuBar({ onExport, onSettings, onUndo, onRedo }: WebMenuBarProps) {
+  const { t } = useTranslation();
   const [openMenu, setOpenMenu] = useState<number | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
-  const menuDef = useMemo(() => getMenuBarDef(), []);
+  const menuDef = useMemo(() => getMenuBarDef(t), [t]);
 
   const handleClose = useCallback(() => {
     setOpenMenu(null);
