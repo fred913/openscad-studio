@@ -1,21 +1,21 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import type { CameraControls as CameraControlsType } from '@react-three/drei'
 import {
   CameraControls,
-  Grid,
+  ContactShadows,
+  Wireframe as DreiWireframe,
+  Environment,
   GizmoHelper,
   GizmoViewcube,
+  Grid,
   OrthographicCamera,
   PerspectiveCamera,
-  ContactShadows,
-  Environment,
-  Wireframe as DreiWireframe,
-} from '@react-three/drei';
-import type { CameraControls as CameraControlsType } from '@react-three/drei';
-import { STLLoader } from 'three-stdlib';
-import * as THREE from 'three';
-import { useTheme } from '../contexts/ThemeContext';
-import { TbBox, TbBoxModel, TbSun, TbFocus2 } from 'react-icons/tb';
+} from '@react-three/drei'
+import { Canvas } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { TbBox, TbBoxModel, TbFocus2, TbSun } from 'react-icons/tb'
+import * as THREE from 'three'
+import { STLLoader } from 'three-stdlib'
+import { useTheme } from '../contexts/ThemeContext'
 
 interface ThreeViewerProps {
   stlPath: string;
@@ -99,6 +99,52 @@ export function ThreeViewer({ stlPath, isLoading }: ThreeViewerProps) {
   const [showShadows, setShowShadows] = useState(true);
   const cameraControlsRef = useRef<CameraControlsType>(null);
   const meshRef = useRef<THREE.Mesh>(null);
+  const suppressContextMenuRef = useRef(false);
+  const clearSuppressTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const clearSuppression = () => {
+      if (clearSuppressTimeoutRef.current !== null) {
+        window.clearTimeout(clearSuppressTimeoutRef.current);
+        clearSuppressTimeoutRef.current = null;
+      }
+      suppressContextMenuRef.current = false;
+    };
+
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      // Keep suppression enabled briefly after right-button release,
+      // so contextmenu emitted outside the preview can still be blocked.
+      if (event.button === 2 && suppressContextMenuRef.current) {
+        if (clearSuppressTimeoutRef.current !== null) {
+          window.clearTimeout(clearSuppressTimeoutRef.current);
+        }
+        clearSuppressTimeoutRef.current = window.setTimeout(() => {
+          suppressContextMenuRef.current = false;
+          clearSuppressTimeoutRef.current = null;
+        }, 150);
+      }
+    };
+
+    const handleWindowContextMenu = (event: MouseEvent) => {
+      if (!suppressContextMenuRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      clearSuppression();
+    };
+
+    window.addEventListener('mouseup', handleWindowMouseUp, true);
+    window.addEventListener('contextmenu', handleWindowContextMenu, true);
+    window.addEventListener('blur', clearSuppression);
+
+    return () => {
+      window.removeEventListener('mouseup', handleWindowMouseUp, true);
+      window.removeEventListener('contextmenu', handleWindowContextMenu, true);
+      window.removeEventListener('blur', clearSuppression);
+      clearSuppression();
+    };
+  }, []);
 
   const handleFitToView = () => {
     if (cameraControlsRef.current && meshRef.current) {
@@ -108,7 +154,18 @@ export function ThreeViewer({ stlPath, isLoading }: ThreeViewerProps) {
   };
 
   return (
-    <div className="w-full h-full relative" style={{ backgroundColor: themeColors.background }}>
+    <div
+      className="w-full h-full relative"
+      style={{ backgroundColor: themeColors.background }}
+      onMouseDownCapture={(event) => {
+        if (event.button === 2) {
+          suppressContextMenuRef.current = true;
+        }
+      }}
+      onContextMenuCapture={(event) => {
+        event.preventDefault();
+      }}
+    >
       {/* Loading overlay - shows on top of viewer during rendering */}
       {isLoading && (
         <div
