@@ -2,35 +2,56 @@
  * Individual Parameter Control Components for OpenSCAD Customizer
  */
 
-import { type ChangeEvent, useState, useEffect, useRef } from 'react';
-import type { CustomizerParam } from '../../utils/customizer/types';
-import { Select } from '../ui';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react'
+import type { CustomizerParam } from '../../utils/customizer/types'
+import { Select } from '../ui'
 
 interface ParameterControlProps {
   param: CustomizerParam;
   onChange: (newValue: string | number | boolean | number[]) => void;
+  translatedName?: string;
+  onExplain?: () => void;
+  explainLabel?: string;
+  explainDisabled?: boolean;
 }
 
-export function ParameterControl({ param, onChange }: ParameterControlProps) {
+export function ParameterControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   switch (param.type) {
     case 'boolean':
-      return <BooleanControl param={param} onChange={onChange} />;
+      return <BooleanControl param={param} onChange={onChange} onExplain={onExplain} explainLabel={explainLabel} explainDisabled={explainDisabled} />;
     case 'slider':
-      return <SliderControl param={param} onChange={onChange} />;
+      return <SliderControl param={param} onChange={onChange} onExplain={onExplain} explainLabel={explainLabel} explainDisabled={explainDisabled} />;
     case 'dropdown':
-      return <DropdownControl param={param} onChange={onChange} />;
+      return <DropdownControl param={param} onChange={onChange} onExplain={onExplain} explainLabel={explainLabel} explainDisabled={explainDisabled} />;
     case 'vector':
-      return <VectorControl param={param} onChange={onChange} />;
+      return <VectorControl param={param} onChange={onChange} onExplain={onExplain} explainLabel={explainLabel} explainDisabled={explainDisabled} />;
     case 'string':
-      return <StringControl param={param} onChange={onChange} />;
+      return <StringControl param={param} onChange={onChange} onExplain={onExplain} explainLabel={explainLabel} explainDisabled={explainDisabled} />;
     case 'number':
     default:
-      return <NumberControl param={param} onChange={onChange} />;
+      return <NumberControl param={param} onChange={onChange} onExplain={onExplain} explainLabel={explainLabel} explainDisabled={explainDisabled} />;
   }
 }
 
+function LabelText({ translatedName, originalName }: { translatedName?: string; originalName: string }) {
+  const hasTranslation = !!translatedName && translatedName !== originalName;
+
+  return (
+    <>
+      <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+        {translatedName || originalName}
+      </span>
+      {hasTranslation && (
+        <span className="text-[10px] leading-tight" style={{ color: 'var(--text-tertiary)' }}>
+          {originalName}
+        </span>
+      )}
+    </>
+  );
+}
+
 // Boolean checkbox control
-function BooleanControl({ param, onChange }: ParameterControlProps) {
+function BooleanControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   const checked = Boolean(param.value);
 
   return (
@@ -45,19 +66,37 @@ function BooleanControl({ param, onChange }: ParameterControlProps) {
           accentColor: 'var(--accent-primary)',
         }}
       />
-      <label
-        htmlFor={`param-${param.name}`}
-        className="text-xs font-medium cursor-pointer"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        {param.name}
-      </label>
+      <div className="flex items-center justify-between w-full gap-2">
+        <label
+          htmlFor={`param-${param.name}`}
+          className="cursor-pointer flex flex-col"
+        >
+          <LabelText translatedName={param.translatedName} originalName={param.name} />
+        </label>
+        {onExplain && (
+          <button
+            type="button"
+            onClick={onExplain}
+            disabled={explainDisabled}
+            className="text-[10px] px-2 py-0.5 rounded border"
+            style={{
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--bg-secondary)',
+              opacity: explainDisabled ? 0.5 : 1,
+              cursor: explainDisabled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {explainLabel || 'Explain'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 // Number slider with input
-function SliderControl({ param, onChange }: ParameterControlProps) {
+function SliderControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   const min = param.min ?? 0;
   const max = param.max ?? 100;
   const step = param.step ?? 1;
@@ -123,30 +162,48 @@ function SliderControl({ param, onChange }: ParameterControlProps) {
 
   return (
     <div className="py-1.5">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-start justify-between mb-1 gap-2">
         <label
           htmlFor={`param-${param.name}`}
-          className="text-xs font-medium"
-          style={{ color: 'var(--text-primary)' }}
+          className="flex flex-col"
         >
-          {param.name}
+          <LabelText translatedName={param.translatedName} originalName={param.name} />
         </label>
-        <input
-          type="number"
-          value={localValue}
-          onChange={handleInputChange}
-          onBlur={handleInputCommit}
-          onKeyDown={handleInputKeyDown}
-          min={min}
-          max={max}
-          step={step}
-          className="w-16 px-1.5 py-0.5 text-xs rounded border"
-          style={{
-            backgroundColor: 'var(--bg-elevated)',
-            borderColor: 'var(--border-primary)',
-            color: 'var(--text-primary)',
-          }}
-        />
+        <div className="flex items-center gap-1.5">
+          {onExplain && (
+            <button
+              type="button"
+              onClick={onExplain}
+              disabled={explainDisabled}
+              className="text-[10px] px-2 py-0.5 rounded border"
+              style={{
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-secondary)',
+                backgroundColor: 'var(--bg-secondary)',
+                opacity: explainDisabled ? 0.5 : 1,
+                cursor: explainDisabled ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {explainLabel || 'Explain'}
+            </button>
+          )}
+          <input
+            type="number"
+            value={localValue}
+            onChange={handleInputChange}
+            onBlur={handleInputCommit}
+            onKeyDown={handleInputKeyDown}
+            min={min}
+            max={max}
+            step={step}
+            className="w-16 px-1.5 py-0.5 text-xs rounded border"
+            style={{
+              backgroundColor: 'var(--bg-elevated)',
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-primary)',
+            }}
+          />
+        </div>
       </div>
       <input
         type="range"
@@ -173,18 +230,36 @@ function SliderControl({ param, onChange }: ParameterControlProps) {
 }
 
 // Dropdown select
-function DropdownControl({ param, onChange }: ParameterControlProps) {
+function DropdownControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   const value = String(param.value);
 
   return (
     <div className="py-1.5">
-      <label
-        htmlFor={`param-${param.name}`}
-        className="text-xs font-medium block mb-0.5"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        {param.name}
-      </label>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <label
+          htmlFor={`param-${param.name}`}
+          className="block flex flex-col"
+        >
+          <LabelText translatedName={param.translatedName} originalName={param.name} />
+        </label>
+        {onExplain && (
+          <button
+            type="button"
+            onClick={onExplain}
+            disabled={explainDisabled}
+            className="text-[10px] px-2 py-0.5 rounded border"
+            style={{
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--bg-secondary)',
+              opacity: explainDisabled ? 0.5 : 1,
+              cursor: explainDisabled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {explainLabel || 'Explain'}
+          </button>
+        )}
+      </div>
       <Select
         id={`param-${param.name}`}
         value={value}
@@ -207,7 +282,7 @@ function DropdownControl({ param, onChange }: ParameterControlProps) {
 }
 
 // Simple number input (spinbox)
-function NumberControl({ param, onChange }: ParameterControlProps) {
+function NumberControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   const [localValue, setLocalValue] = useState(String(param.value));
 
   // Sync local value when param value changes externally
@@ -231,13 +306,31 @@ function NumberControl({ param, onChange }: ParameterControlProps) {
 
   return (
     <div className="py-1.5">
-      <label
-        htmlFor={`param-${param.name}`}
-        className="text-xs font-medium block mb-0.5"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        {param.name}
-      </label>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <label
+          htmlFor={`param-${param.name}`}
+          className="block flex flex-col"
+        >
+          <LabelText translatedName={param.translatedName} originalName={param.name} />
+        </label>
+        {onExplain && (
+          <button
+            type="button"
+            onClick={onExplain}
+            disabled={explainDisabled}
+            className="text-[10px] px-2 py-0.5 rounded border"
+            style={{
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--bg-secondary)',
+              opacity: explainDisabled ? 0.5 : 1,
+              cursor: explainDisabled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {explainLabel || 'Explain'}
+          </button>
+        )}
+      </div>
       <input
         type="number"
         id={`param-${param.name}`}
@@ -257,7 +350,7 @@ function NumberControl({ param, onChange }: ParameterControlProps) {
 }
 
 // String text input
-function StringControl({ param, onChange }: ParameterControlProps) {
+function StringControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   const [localValue, setLocalValue] = useState(String(param.value));
 
   // Sync local value when param value changes externally
@@ -280,13 +373,31 @@ function StringControl({ param, onChange }: ParameterControlProps) {
 
   return (
     <div className="py-1.5">
-      <label
-        htmlFor={`param-${param.name}`}
-        className="text-xs font-medium block mb-0.5"
-        style={{ color: 'var(--text-primary)' }}
-      >
-        {param.name}
-      </label>
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <label
+          htmlFor={`param-${param.name}`}
+          className="block flex flex-col"
+        >
+          <LabelText translatedName={param.translatedName} originalName={param.name} />
+        </label>
+        {onExplain && (
+          <button
+            type="button"
+            onClick={onExplain}
+            disabled={explainDisabled}
+            className="text-[10px] px-2 py-0.5 rounded border"
+            style={{
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--bg-secondary)',
+              opacity: explainDisabled ? 0.5 : 1,
+              cursor: explainDisabled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {explainLabel || 'Explain'}
+          </button>
+        )}
+      </div>
       <input
         type="text"
         id={`param-${param.name}`}
@@ -306,7 +417,7 @@ function StringControl({ param, onChange }: ParameterControlProps) {
 }
 
 // Vector input (array of numbers)
-function VectorControl({ param, onChange }: ParameterControlProps) {
+function VectorControl({ param, onChange, onExplain, explainLabel, explainDisabled }: ParameterControlProps) {
   const values = Array.isArray(param.value) ? param.value : [];
   const [localValues, setLocalValues] = useState(values.map(String));
 
@@ -339,9 +450,28 @@ function VectorControl({ param, onChange }: ParameterControlProps) {
 
   return (
     <div className="py-1.5">
-      <label className="text-xs font-medium block mb-0.5" style={{ color: 'var(--text-primary)' }}>
-        {param.name}
-      </label>
+      <div className="mb-0.5 flex items-start justify-between gap-2">
+        <label className="block flex flex-col">
+          <LabelText translatedName={param.translatedName} originalName={param.name} />
+        </label>
+        {onExplain && (
+          <button
+            type="button"
+            onClick={onExplain}
+            disabled={explainDisabled}
+            className="text-[10px] px-2 py-0.5 rounded border"
+            style={{
+              borderColor: 'var(--border-primary)',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--bg-secondary)',
+              opacity: explainDisabled ? 0.5 : 1,
+              cursor: explainDisabled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {explainLabel || 'Explain'}
+          </button>
+        )}
+      </div>
       <div className="flex gap-1">
         {values.map((_val, idx) => (
           <input

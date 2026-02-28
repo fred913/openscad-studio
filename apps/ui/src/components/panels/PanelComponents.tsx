@@ -1,14 +1,14 @@
-import React, { useCallback, useRef, useState } from 'react';
-import type { IDockviewPanelProps, IDockviewPanelHeaderProps } from 'dockview';
-import { TbCode, TbEye, TbSparkles, TbTerminal2 } from 'react-icons/tb';
-import type { IconType } from 'react-icons';
-import { Editor } from '../Editor';
-import { Preview } from '../Preview';
-import { AiPromptPanel, type AiPromptPanelRef } from '../AiPromptPanel';
-import { DiagnosticsPanel } from '../DiagnosticsPanel';
-import { DiffViewer } from '../DiffViewer';
-import { CustomizerPanel } from '../CustomizerPanel';
-import { useWorkspace } from '../../contexts/WorkspaceContext';
+import type { IDockviewPanelHeaderProps, IDockviewPanelProps } from 'dockview'
+import React, { useCallback, useRef, useState } from 'react'
+import type { IconType } from 'react-icons'
+import { TbCode, TbEye, TbLayoutGrid, TbSparkles, TbTerminal2 } from 'react-icons/tb'
+import { useWorkspace } from '../../contexts/WorkspaceContext'
+import { AiPromptPanel, type AiPromptPanelRef } from '../AiPromptPanel'
+import { CustomizerPanel } from '../CustomizerPanel'
+import { DiagnosticsPanel } from '../DiagnosticsPanel'
+import { DiffViewer } from '../DiffViewer'
+import { Editor } from '../Editor'
+import { Preview } from '../Preview'
 
 const EditorPanel: React.FC<IDockviewPanelProps> = () => {
   const { source, updateSource, diagnostics, onManualRender, settings } = useWorkspace();
@@ -68,10 +68,60 @@ const DiffViewerPanel: React.FC<IDockviewPanelProps> = () => {
 };
 
 const CustomizerPanelWrapper: React.FC<IDockviewPanelProps> = () => {
-  const { source, updateSource } = useWorkspace();
+  const ws = useWorkspace();
   return (
     <div className="h-full" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-      <CustomizerPanel code={source} onChange={updateSource} />
+      <CustomizerPanel
+        code={ws.source}
+        onChange={ws.updateSource}
+        onExplainParameter={(prompt) => ws.submitPrompt(prompt, 'edit')}
+        isAiStreaming={ws.isStreaming}
+      />
+    </div>
+  );
+};
+
+const ComposerPanel: React.FC<IDockviewPanelProps> = () => {
+  const ws = useWorkspace();
+
+  return (
+    <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+      <div className="h-1/2 min-h-0">
+        <CustomizerPanel
+          code={ws.source}
+          onChange={ws.updateSource}
+          onExplainParameter={(prompt) => ws.submitPrompt(prompt, 'edit')}
+          isAiStreaming={ws.isStreaming}
+        />
+      </div>
+
+      {/* Explicit divider between Parameters and AI */}
+      <div
+        className="shrink-0"
+        style={{
+          height: '1px',
+          background:
+            'linear-gradient(90deg, transparent 0%, var(--border-primary) 12%, var(--border-primary) 88%, transparent 100%)',
+        }}
+      />
+
+      <div className="h-1/2 min-h-0">
+        <AiPromptPanel
+          ref={ws.aiPromptPanelRef as React.Ref<AiPromptPanelRef>}
+          onSubmit={ws.submitPrompt}
+          isStreaming={ws.isStreaming}
+          streamingResponse={ws.streamingResponse}
+          onCancel={ws.cancelStream}
+          messages={ws.messages}
+          onNewConversation={ws.newConversation}
+          currentToolCalls={ws.currentToolCalls}
+          currentModel={ws.currentModel}
+          availableProviders={ws.availableProviders}
+          onModelChange={ws.setCurrentModel}
+          onRestoreCheckpoint={ws.handleRestoreCheckpoint}
+          onOpenSettings={ws.onOpenAiSettings}
+        />
+      </div>
     </div>
   );
 };
@@ -84,6 +134,7 @@ export const panelComponents: Record<string, React.FC<IDockviewPanelProps>> = {
   console: ConsolePanel,
   'diff-viewer': DiffViewerPanel,
   customizer: CustomizerPanelWrapper,
+  composer: ComposerPanel,
 };
 
 export interface PanelTypeInfo {
@@ -96,6 +147,7 @@ export interface PanelTypeInfo {
 export const PANEL_TYPES: PanelTypeInfo[] = [
   { id: 'editor', label: 'Editor', icon: TbCode },
   { id: 'preview', label: 'Preview', icon: TbEye },
+  { id: 'composer', label: 'Composer', icon: TbLayoutGrid },
   { id: 'ai-chat', label: 'AI', icon: TbSparkles },
   { id: 'console', label: 'Console', icon: TbTerminal2 },
 ];

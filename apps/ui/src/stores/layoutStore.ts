@@ -1,70 +1,63 @@
-import type { DockviewApi, SerializedDockview } from 'dockview';
+import type { DockviewApi, SerializedDockview } from 'dockview'
 
-const LAYOUT_STORAGE_KEY = 'openscad-studio-layout';
+const LAYOUT_STORAGE_KEY = 'openscad-studio-layout'
 
-export type WorkspacePreset = 'default' | 'ai-first' | 'wide-editor' | 'wide-preview' | 'minimal';
+export type WorkspacePreset = 'default' | 'ai-first' | 'wide-editor' | 'wide-preview' | 'minimal'
 
-let dockviewApi: DockviewApi | null = null;
+let dockviewApi: DockviewApi | null = null
 
 export function getDockviewApi(): DockviewApi | null {
-  return dockviewApi;
+  return dockviewApi
 }
 
 export function setDockviewApi(api: DockviewApi | null): void {
-  dockviewApi = api;
+  dockviewApi = api
 }
 
 export function lockEditorGroup(api: DockviewApi) {
-  const editorPanel = api.getPanel('editor');
+  const editorPanel = api.getPanel('editor')
   if (editorPanel) {
-    const group = editorPanel.api.group;
-    group.locked = 'no-drop-target';
-    group.header.hidden = true;
+    const group = editorPanel.api.group
+    group.locked = 'no-drop-target'
+    group.header.hidden = true
   }
 }
 
 export function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
   switch (preset) {
     case 'default': {
-      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor' });
-      api.addPanel({
-        id: 'ai-chat',
-        component: 'ai-chat',
-        title: 'AI',
-        position: { referencePanel: 'editor', direction: 'below' },
-        initialHeight: 350,
-      });
-      const aiGroup = api.getPanel('ai-chat');
-      if (aiGroup) {
+      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor' })
+      const editorPanel = api.getPanel('editor')
+      if (editorPanel) {
         api.addPanel({
-          id: 'console',
-          component: 'console',
-          title: 'Console',
-          position: { referenceGroup: aiGroup.group.id },
+          id: 'composer',
+          component: 'composer',
+          title: 'Composer',
+          position: { referenceGroup: editorPanel.group.id },
           inactive: true,
-        });
+        })
       }
       api.addPanel({
         id: 'preview',
         component: 'preview',
         title: 'Preview',
         position: { referencePanel: 'editor', direction: 'right' },
-      });
-      const previewPanel = api.getPanel('preview');
-      if (previewPanel) {
+      })
+      const previewGroup = api.getPanel('preview')
+      if (previewGroup) {
         api.addPanel({
-          id: 'customizer',
-          component: 'customizer',
-          title: 'Customizer',
-          position: { referenceGroup: previewPanel.group.id },
+          id: 'console',
+          component: 'console',
+          title: 'Console',
+          position: { referenceGroup: previewGroup.group.id },
           inactive: true,
-        });
+        })
       }
-      break;
+      break
     }
     case 'ai-first': {
-      api.addPanel({ id: 'ai-chat', component: 'ai-chat', title: 'AI' });
-      const aiPanel = api.getPanel('ai-chat');
+      api.addPanel({ id: 'ai-chat', component: 'ai-chat', title: 'AI' })
+      const aiPanel = api.getPanel('ai-chat')
       if (aiPanel) {
         api.addPanel({
           id: 'editor',
@@ -72,15 +65,15 @@ export function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
           title: 'Editor',
           position: { referenceGroup: aiPanel.group.id },
           inactive: true,
-        });
+        })
       }
       api.addPanel({
         id: 'preview',
         component: 'preview',
         title: 'Preview',
         position: { referencePanel: 'ai-chat', direction: 'right' },
-      });
-      const aiFpPreview = api.getPanel('preview');
+      })
+      const aiFpPreview = api.getPanel('preview')
       if (aiFpPreview) {
         api.addPanel({
           id: 'customizer',
@@ -88,7 +81,7 @@ export function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
           title: 'Customizer',
           position: { referenceGroup: aiFpPreview.group.id },
           inactive: true,
-        });
+        })
       }
       api.addPanel({
         id: 'console',
@@ -96,161 +89,162 @@ export function addPresetPanels(api: DockviewApi, preset: WorkspacePreset) {
         title: 'Console',
         position: { referencePanel: 'preview', direction: 'below' },
         initialHeight: 250,
-      });
-      break;
+      })
+      break
     }
     case 'wide-editor': {
-      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor', initialWidth: 800 });
+      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor', initialWidth: 800 })
       api.addPanel({
         id: 'preview',
         component: 'preview',
         title: 'Preview',
         position: { referencePanel: 'editor', direction: 'right' },
-      });
-      const wep = api.getPanel('preview');
+      })
+      const wep = api.getPanel('preview')
       if (wep) {
         api.addPanel({
           id: 'customizer',
           component: 'customizer',
           title: 'Customizer',
           position: { referenceGroup: wep.group.id },
-        });
+        })
       }
       api.addPanel({
         id: 'ai-chat',
         component: 'ai-chat',
         title: 'AI',
         position: { referencePanel: 'preview', direction: 'below' },
-      });
+      })
       api.addPanel({
         id: 'console',
         component: 'console',
         title: 'Console',
         position: { referenceGroup: api.groups[api.groups.length - 1].id },
-      });
-      break;
+      })
+      break
     }
     case 'wide-preview': {
-      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor', initialWidth: 400 });
+      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor', initialWidth: 400 })
       api.addPanel({
         id: 'preview',
         component: 'preview',
         title: 'Preview',
         position: { referencePanel: 'editor', direction: 'right' },
         initialWidth: 800,
-      });
-      const wpp = api.getPanel('preview');
+      })
+      const wpp = api.getPanel('preview')
       if (wpp) {
         api.addPanel({
           id: 'customizer',
           component: 'customizer',
           title: 'Customizer',
           position: { referenceGroup: wpp.group.id },
-        });
+        })
       }
       api.addPanel({
         id: 'ai-chat',
         component: 'ai-chat',
         title: 'AI',
         position: { referencePanel: 'editor', direction: 'below' },
-      });
+      })
       api.addPanel({
         id: 'console',
         component: 'console',
         title: 'Console',
         position: { referenceGroup: api.groups[api.groups.length - 1].id },
-      });
-      break;
+      })
+      break
     }
     case 'minimal': {
-      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor' });
+      api.addPanel({ id: 'editor', component: 'editor', title: 'Editor' })
       api.addPanel({
         id: 'preview',
         component: 'preview',
         title: 'Preview',
         position: { referencePanel: 'editor', direction: 'right' },
-      });
-      const mp = api.getPanel('preview');
+      })
+      const mp = api.getPanel('preview')
       if (mp) {
         api.addPanel({
           id: 'customizer',
           component: 'customizer',
           title: 'Customizer',
           position: { referenceGroup: mp.group.id },
-        });
+        })
       }
-      break;
+      break
     }
   }
 
-  if (preset !== 'ai-first') {
-    lockEditorGroup(api);
+  // Keep Editor group header visible in default preset so Editor/Composer tabs can be switched.
+  if (preset !== 'ai-first' && preset !== 'default') {
+    lockEditorGroup(api)
   }
 }
 
 export function applyDefaultLayout(api: DockviewApi): void {
-  addPresetPanels(api, 'default');
+  addPresetPanels(api, 'default')
 }
 
 export function saveLayout(): void {
-  if (!dockviewApi) return;
+  if (!dockviewApi) return
   try {
-    const json = dockviewApi.toJSON();
-    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(json));
+    const json = dockviewApi.toJSON()
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(json))
   } catch (e) {
-    console.error('Failed to save layout:', e);
+    console.error('Failed to save layout:', e)
   }
 }
 
 export function loadLayout(): SerializedDockview | null {
-  const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
-  if (!saved) return null;
+  const saved = localStorage.getItem(LAYOUT_STORAGE_KEY)
+  if (!saved) return null
   try {
-    return JSON.parse(saved) as SerializedDockview;
+    return JSON.parse(saved) as SerializedDockview
   } catch (e) {
-    console.error('Failed to parse saved layout:', e);
-    return null;
+    console.error('Failed to parse saved layout:', e)
+    return null
   }
 }
 
 export function clearSavedLayout(): void {
-  localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  localStorage.removeItem(LAYOUT_STORAGE_KEY)
 }
 
 export function resetLayout(): void {
-  clearSavedLayout();
+  clearSavedLayout()
   if (dockviewApi) {
-    dockviewApi.clear();
-    applyDefaultLayout(dockviewApi);
-    saveLayout();
+    dockviewApi.clear()
+    applyDefaultLayout(dockviewApi)
+    saveLayout()
   }
 }
 
 export function applyWorkspacePreset(preset: WorkspacePreset): void {
-  if (!dockviewApi) return;
-  dockviewApi.clear();
-  addPresetPanels(dockviewApi, preset);
-  saveLayout();
+  if (!dockviewApi) return
+  dockviewApi.clear()
+  addPresetPanels(dockviewApi, preset)
+  saveLayout()
 }
 
 export function openPanel(panelId: string, component: string, title: string): void {
-  if (!dockviewApi) return;
+  if (!dockviewApi) return
 
-  const existing = dockviewApi.getPanel(panelId);
+  const existing = dockviewApi.getPanel(panelId)
   if (existing) {
-    existing.api.setActive();
-    return;
+    existing.api.setActive()
+    return
   }
 
-  const groups = dockviewApi.groups;
+  const groups = dockviewApi.groups
   if (groups.length > 0) {
     dockviewApi.addPanel({
       id: panelId,
       component,
       title,
       position: { referenceGroup: groups[groups.length - 1].id },
-    });
+    })
   } else {
-    dockviewApi.addPanel({ id: panelId, component, title });
+    dockviewApi.addPanel({ id: panelId, component, title })
   }
 }

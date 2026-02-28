@@ -1,4 +1,4 @@
-import { SelectHTMLAttributes, forwardRef } from 'react';
+import { SelectHTMLAttributes, forwardRef } from 'react'
 
 export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   /**
@@ -31,7 +31,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       "data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3e%3cpath d='M4 6 L8 10 L12 6' stroke='%23cccccc' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e";
 
     const styles = {
-      backgroundColor: disabled ? 'var(--bg-tertiary)' : 'var(--bg-elevated)',
+      // backgroundColor: disabled ? 'var(--bg-tertiary)' : 'var(--bg-elevated)',
       color: disabled ? 'var(--text-tertiary)' : 'var(--text-primary)',
       border: '1px solid var(--border-secondary)',
       cursor: disabled ? 'not-allowed' : 'pointer',

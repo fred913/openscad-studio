@@ -186,9 +186,25 @@
   },
   "customizer": {
     "title": "Customizer",
+    "parametersTitle": "Parameters",
+    "parametersSubtitle": "Tweak values and see the preview update.",
     "noParameters": "No parameters available",
+    "addCommentsHint": "Add customizer comments:",
     "reset": "Reset",
-    "apply": "Apply"
+    "resetTooltip": "Reset all parameters to default values",
+    "apply": "Apply",
+    "explain": "Explain",
+    "explainPrompt": {
+      "en": "You are looking at this OpenSCAD source code:\n\n```scad\n{{code}}\n```\n\nExplain what the parameter \"{{param}}\" is for in THIS code specifically, including common value ranges, model impact, and practical tuning advice.",
+      "zh": "你正在查看下面这段 OpenSCAD 源代码：\n\n```scad\n{{code}}\n```\n\n请结合这段代码，解释参数“{{param}}”在此模型中的作用、常见取值范围、对模型的影响，以及调参建议。"
+    },
+    "translateStatus": "AI Translate",
+    "translate": {
+      "idle": "Idle",
+      "in-progress": "In progress",
+      "done": "Done",
+      "failed": "Failed"
+    }
   },
   "tabs": {
     "close": "Close",
@@ -212,6 +228,7 @@
     "exportFailed": "Export failed: {{error}}",
     "saveFailed": "Failed to save file: {{error}}",
     "openFailed": "Failed to open file: {{error}}",
+    "dropOnlyScad": "Please drop a .scad file",
     "cannotOpenRecentWeb": "Cannot open recent files in web mode",
     "unsavedChanges": "Unsaved Changes",
     "saveChangesPrompt": "Do you want to save the changes you made?",

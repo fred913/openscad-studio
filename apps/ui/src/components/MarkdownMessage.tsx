@@ -1,6 +1,6 @@
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import remarkGfm from 'remark-gfm'
 
 interface MarkdownMessageProps {
   content: string;
@@ -19,10 +19,12 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
             return (
               <code
                 style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  padding: '0.15em 0.4em',
-                  borderRadius: '4px',
+                  backgroundColor: 'color-mix(in srgb, var(--accent-primary) 14%, var(--bg-primary) 86%)',
+                  padding: '0.08em 0.32em',
+                  borderRadius: '6px',
                   fontSize: '0.85em',
+                  color: 'var(--text-primary)',
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.02)',
                   fontFamily:
                     "'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', Menlo, Consolas, monospace",
                 }}
@@ -40,14 +42,14 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
               PreTag="div"
               style={{}}
               customStyle={{
-                backgroundColor: 'var(--bg-tertiary)',
-                padding: '14px 16px',
+                backgroundColor:
+                  'color-mix(in srgb, var(--accent-primary) 6%, var(--bg-elevated) 94%)',
+                padding: '10px 12px',
                 borderRadius: '8px',
                 fontSize: '0.84em',
                 lineHeight: '1.6',
                 overflow: 'auto',
                 margin: '12px 0',
-                border: '1px solid var(--border-subtle)',
               }}
               codeTagProps={{
                 style: {

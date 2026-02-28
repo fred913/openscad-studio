@@ -733,6 +733,80 @@ function App() {
     }
   }, [createNewTab, showWelcome, switchTab, t, tabs, updateSource]);
 
+  const handleDroppedFile = useCallback(
+    async (file: File) => {
+      const fileName = file.name || '';
+      if (!fileName.toLowerCase().endsWith('.scad')) {
+        toast.error(t('app.dropOnlyScad'));
+        return;
+      }
+
+      try {
+        const platform = getPlatform();
+        const fileWithPath = file as File & { path?: string };
+
+        let result: { path: string | null; name: string; content: string };
+
+        if (platform.capabilities.hasFileSystem && fileWithPath.path) {
+          const readResult = await platform.fileRead(fileWithPath.path);
+          if (!readResult) return;
+          result = readResult;
+        } else {
+          result = {
+            path: null,
+            name: fileName,
+            content: await file.text(),
+          };
+        }
+
+        if (result.path) {
+          const existingTab = tabsRef.current.find((t) => t.filePath === result.path);
+          if (existingTab) {
+            await switchTab(existingTab.id);
+            setShowWelcome(false);
+            return;
+          }
+        }
+
+        const currentTabs = tabsRef.current;
+        const firstTab = currentTabs[0];
+        const shouldReplaceFirstTab =
+          showWelcome && currentTabs.length === 1 && !firstTab.filePath && !firstTab.isDirty;
+
+        if (shouldReplaceFirstTab) {
+          setTabs([
+            {
+              ...firstTab,
+              filePath: result.path,
+              name: result.name,
+              content: result.content,
+              savedContent: result.content,
+              isDirty: false,
+            },
+          ]);
+          updateSource(result.content);
+        } else {
+          createNewTab(result.path, result.content, result.name);
+        }
+
+        setShowWelcome(false);
+        if (result.path) addToRecentFiles(result.path);
+
+        if (manualRenderRef.current) {
+          setTimeout(() => {
+            if (manualRenderRef.current) {
+              manualRenderRef.current();
+            }
+          }, 100);
+        }
+      } catch (err) {
+        console.error('Failed to open dropped file:', err);
+        toast.error(t('app.openFailed', { error: String(err) }));
+      }
+    },
+    [createNewTab, showWelcome, switchTab, t, updateSource]
+  );
+
   // Helper function to check for unsaved changes before destructive operations
   // Returns: true if ok to proceed, false if user wants to cancel
   const checkUnsavedChangesRef = useRef<() => Promise<boolean>>();
@@ -898,6 +972,38 @@ function App() {
     });
     return unlisten;
   }, []);
+
+  useEffect(() => {
+    const handleDragOver = (event: DragEvent) => {
+      if (event.dataTransfer?.types.includes('Files')) {
+        event.preventDefault();
+      }
+    };
+
+    const handleDrop = async (event: DragEvent) => {
+      if (!event.dataTransfer?.files?.length) return;
+
+      event.preventDefault();
+
+      const files = Array.from(event.dataTransfer.files);
+      const scadFile = files.find((file) => file.name.toLowerCase().endsWith('.scad'));
+
+      if (!scadFile) {
+        toast.error(t('app.dropOnlyScad'));
+        return;
+      }
+
+      await handleDroppedFile(scadFile);
+    };
+
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, [handleDroppedFile, t]);
 
   useEffect(() => {
     const unlisten = eventBus.on('history:restore', ({ code }) => {

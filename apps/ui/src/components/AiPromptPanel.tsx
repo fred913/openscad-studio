@@ -243,8 +243,9 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                       <div
                         className="max-w-[85%] rounded-lg px-3 py-2"
                         style={{
-                          backgroundColor: 'var(--accent-primary)',
-                          color: 'var(--text-inverse)',
+                          backgroundColor:
+                            'color-mix(in srgb, var(--accent-primary) 16%, var(--bg-primary) 84%)',
+                          color: 'var(--text-primary)',
                         }}
                       >
                         <div className="text-xs mb-1" style={{ opacity: 0.8 }}>
@@ -281,11 +282,10 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
                 return (
                   <div key={message.id} className="flex gap-2 justify-start">
                     <div
-                      className="max-w-[85%] rounded-lg px-3 py-2 border"
+                      className="max-w-[85%] rounded-lg px-3 py-2"
                       style={{
                         backgroundColor: 'var(--bg-primary)',
                         color: 'var(--text-primary)',
-                        borderColor: 'var(--border-secondary)',
                       }}
                     >
                       <div className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
@@ -471,11 +471,10 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
             {streamingResponse && (
               <div className="flex gap-2 justify-start">
                 <div
-                  className="max-w-[85%] rounded-lg px-3 py-2 border"
+                  className="max-w-[85%] rounded-lg px-3 py-2"
                   style={{
                     backgroundColor: 'var(--bg-primary)',
                     color: 'var(--text-primary)',
-                    borderColor: 'var(--border-secondary)',
                   }}
                 >
                   <div className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>
@@ -554,24 +553,23 @@ export const AiPromptPanel = forwardRef<AiPromptPanelRef, AiPromptPanelProps>(
             rows={2}
             disabled={isStreaming}
           />
-          {isStreaming ? (
+          {isStreaming && (
             <Button variant="danger" onClick={onCancel}>
               {t('common.cancel')}
             </Button>
-          ) : (
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              disabled={!prompt.trim()}
-              title={t('ai.submitPromptShortcut')}
-              style={{
-                opacity: !prompt.trim() ? 0.5 : 1,
-                cursor: !prompt.trim() ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {t('ai.send')}
-            </Button>
           )}
+          <Button
+            variant="primary"
+            onClick={handleSubmit}
+            disabled={isStreaming || !prompt.trim()}
+            title={t('ai.submitPromptShortcut')}
+            style={{
+              opacity: isStreaming || !prompt.trim() ? 0.45 : 0.9,
+              cursor: isStreaming || !prompt.trim() ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {t('ai.send')}
+          </Button>
         </div>
 
         {/* Help text and model selector */}

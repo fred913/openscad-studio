@@ -186,9 +186,25 @@
   },
   "customizer": {
     "title": "自定义器",
+    "parametersTitle": "参数",
+    "parametersSubtitle": "调整参数并实时查看预览更新。",
     "noParameters": "无可用参数",
+    "addCommentsHint": "添加自定义注释：",
     "reset": "重置",
-    "apply": "应用"
+    "resetTooltip": "将所有参数重置为默认值",
+    "apply": "应用",
+    "explain": "解释",
+    "explainPrompt": {
+      "en": "You are looking at this OpenSCAD source code:\n\n```scad\n{{code}}\n```\n\nExplain what the parameter \"{{param}}\" is for in THIS code specifically, including common value ranges, model impact, and practical tuning advice.",
+      "zh": "你正在查看下面这段 OpenSCAD 源代码：\n\n```scad\n{{code}}\n```\n\n请结合这段代码，解释参数“{{param}}”在此模型中的作用、常见取值范围、对模型的影响，以及调参建议。"
+    },
+    "translateStatus": "AI 翻译",
+    "translate": {
+      "idle": "空闲",
+      "in-progress": "进行中",
+      "done": "完成",
+      "failed": "失败"
+    }
   },
   "tabs": {
     "close": "关闭",
@@ -212,6 +228,7 @@
     "exportFailed": "导出失败：{{error}}",
     "saveFailed": "保存文件失败：{{error}}",
     "openFailed": "打开文件失败：{{error}}",
+    "dropOnlyScad": "请拖入 .scad 文件",
     "cannotOpenRecentWeb": "无法在网页模式下打开最近文件",
     "unsavedChanges": "未保存的更改",
     "saveChangesPrompt": "是否要保存您所做的更改？",
