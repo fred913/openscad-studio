@@ -18,6 +18,7 @@ export interface DropdownOption {
 export interface CustomizerParam {
   name: string
   translatedName?: string
+  description?: string
   type: ParameterType
   value: string | number | boolean | number[]
 

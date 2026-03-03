@@ -33,7 +33,15 @@ export function ParameterControl({ param, onChange, onExplain, explainLabel, exp
   }
 }
 
-function LabelText({ translatedName, originalName }: { translatedName?: string; originalName: string }) {
+function LabelText({
+  translatedName,
+  originalName,
+  description,
+}: {
+  translatedName?: string;
+  originalName: string;
+  description?: string;
+}) {
   const hasTranslation = !!translatedName && translatedName !== originalName;
 
   return (
@@ -44,6 +52,11 @@ function LabelText({ translatedName, originalName }: { translatedName?: string; 
       {hasTranslation && (
         <span className="text-[10px] leading-tight" style={{ color: 'var(--text-tertiary)' }}>
           {originalName}
+        </span>
+      )}
+      {description && (
+        <span className="text-[10px] leading-tight mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+          {description}
         </span>
       )}
     </>
@@ -71,7 +84,11 @@ function BooleanControl({ param, onChange, onExplain, explainLabel, explainDisab
           htmlFor={`param-${param.name}`}
           className="cursor-pointer flex flex-col"
         >
-          <LabelText translatedName={param.translatedName} originalName={param.name} />
+          <LabelText
+            translatedName={param.translatedName}
+            originalName={param.name}
+            description={param.description}
+          />
         </label>
         {onExplain && (
           <button
@@ -167,7 +184,11 @@ function SliderControl({ param, onChange, onExplain, explainLabel, explainDisabl
           htmlFor={`param-${param.name}`}
           className="flex flex-col"
         >
-          <LabelText translatedName={param.translatedName} originalName={param.name} />
+          <LabelText
+            translatedName={param.translatedName}
+            originalName={param.name}
+            description={param.description}
+          />
         </label>
         <div className="flex items-center gap-1.5">
           {onExplain && (
@@ -240,7 +261,11 @@ function DropdownControl({ param, onChange, onExplain, explainLabel, explainDisa
           htmlFor={`param-${param.name}`}
           className="block flex flex-col"
         >
-          <LabelText translatedName={param.translatedName} originalName={param.name} />
+          <LabelText
+            translatedName={param.translatedName}
+            originalName={param.name}
+            description={param.description}
+          />
         </label>
         {onExplain && (
           <button
@@ -311,7 +336,11 @@ function NumberControl({ param, onChange, onExplain, explainLabel, explainDisabl
           htmlFor={`param-${param.name}`}
           className="block flex flex-col"
         >
-          <LabelText translatedName={param.translatedName} originalName={param.name} />
+          <LabelText
+            translatedName={param.translatedName}
+            originalName={param.name}
+            description={param.description}
+          />
         </label>
         {onExplain && (
           <button
@@ -378,7 +407,11 @@ function StringControl({ param, onChange, onExplain, explainLabel, explainDisabl
           htmlFor={`param-${param.name}`}
           className="block flex flex-col"
         >
-          <LabelText translatedName={param.translatedName} originalName={param.name} />
+          <LabelText
+            translatedName={param.translatedName}
+            originalName={param.name}
+            description={param.description}
+          />
         </label>
         {onExplain && (
           <button
@@ -452,7 +485,11 @@ function VectorControl({ param, onChange, onExplain, explainLabel, explainDisabl
     <div className="py-1.5">
       <div className="mb-0.5 flex items-start justify-between gap-2">
         <label className="block flex flex-col">
-          <LabelText translatedName={param.translatedName} originalName={param.name} />
+          <LabelText
+            translatedName={param.translatedName}
+            originalName={param.name}
+            description={param.description}
+          />
         </label>
         {onExplain && (
           <button
