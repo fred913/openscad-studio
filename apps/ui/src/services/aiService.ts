@@ -1,18 +1,18 @@
-import { tool } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
-import { z } from 'zod';
-import { eventBus, historyService } from '../platform';
-import { RenderService } from './renderService';
-import { captureOffscreen, type CaptureOptions } from './offscreenRenderer';
-import type { AiProvider } from '../stores/apiKeyStore';
-import { getOpenAIBaseUrl } from '../stores/apiKeyStore';
+import { createOpenAI } from '@ai-sdk/openai'
+import { tool } from 'ai'
+import { z } from 'zod'
+import { eventBus, historyService } from '../platform'
+import type { AiProvider } from '../stores/apiKeyStore'
+import { getOpenAIBaseUrl } from '../stores/apiKeyStore'
+import { captureOffscreen, type CaptureOptions } from './offscreenRenderer'
+import { RenderService } from './renderService'
 
 export interface AiToolCallbacks {
-  getCurrentCode: () => string;
-  captureCurrentView: () => Promise<string | null>;
-  getStlBlobUrl: () => string | null;
-  getWorkingDir: () => string | null;
-  getAuxiliaryFiles: () => Record<string, string>;
+  getCurrentCode: () => string
+  captureCurrentView: () => Promise<string | null>
+  getStlBlobUrl: () => string | null
+  getWorkingDir: () => string | null
+  getAuxiliaryFiles: () => Record<string, string>
 }
 
 export const SYSTEM_PROMPT = `## OpenSCAD AI Assistant
@@ -80,18 +80,24 @@ You are an expert OpenSCAD assistant helping users design and modify 3D models. 
 - \`if (condition) { ... }\`
 - Variables: \`x = 10;\`
 - Functions: \`function name(params) = expression;\`
-`;
+`
 
 export function createModel(provider: AiProvider, apiKey: string, modelId: string) {
-  const baseUrl = getOpenAIBaseUrl();
-  const config: { apiKey: string; baseURL?: string } = { apiKey };
-  
-  if (baseUrl && baseUrl.trim()) {
-    config.baseURL = baseUrl.trim();
+  switch (provider) {
+    case 'openai': {
+      const baseUrl = getOpenAIBaseUrl()
+      const config: { apiKey: string; baseURL?: string } = { apiKey }
+
+      if (baseUrl && baseUrl.trim()) {
+        config.baseURL = baseUrl.trim()
+      }
+
+      const openai = createOpenAI(config)
+      return openai(modelId)
+    }
+    default:
+      throw new Error(`Unsupported AI provider: ${provider satisfies never}`)
   }
-  
-  const openai = createOpenAI(config);
-  return openai(modelId);
 }
 
 export function buildTools(callbacks: AiToolCallbacks) {
@@ -100,7 +106,7 @@ export function buildTools(callbacks: AiToolCallbacks) {
       description: 'Get the current OpenSCAD code from the editor',
       inputSchema: z.object({}),
       execute: async () => {
-        return callbacks.getCurrentCode();
+        return callbacks.getCurrentCode()
       },
     }),
 
@@ -109,12 +115,12 @@ export function buildTools(callbacks: AiToolCallbacks) {
         'List all .scad files in the current working directory. Returns relative file paths. Use this to discover project structure and find files referenced by include/use statements.',
       inputSchema: z.object({}),
       execute: async () => {
-        const files = callbacks.getAuxiliaryFiles();
-        const paths = Object.keys(files);
+        const files = callbacks.getAuxiliaryFiles()
+        const paths = Object.keys(files)
         if (paths.length === 0) {
-          return 'No project files found. The current file may not have been saved to disk, or the working directory has no other .scad files.';
+          return 'No project files found. The current file may not have been saved to disk, or the working directory has no other .scad files.'
         }
-        return `Project files (${paths.length}):\n${paths.map((p) => `  ${p}`).join('\n')}`;
+        return `Project files (${paths.length}):\n${paths.map((p) => `  ${p}`).join('\n')}`
       },
     }),
 
@@ -127,16 +133,16 @@ export function buildTools(callbacks: AiToolCallbacks) {
           .describe('Relative path to the file (e.g. "parts.scad" or "lib/utils.scad")'),
       }),
       execute: async ({ path }) => {
-        const files = callbacks.getAuxiliaryFiles();
-        const content = files[path];
+        const files = callbacks.getAuxiliaryFiles()
+        const content = files[path]
         if (content === undefined) {
-          const available = Object.keys(files);
+          const available = Object.keys(files)
           if (available.length === 0) {
-            return `❌ File not found: ${path}\n\nNo project files are available. The current file may not have been saved to disk.`;
+            return `❌ File not found: ${path}\n\nNo project files are available. The current file may not have been saved to disk.`
           }
-          return `❌ File not found: ${path}\n\nAvailable files:\n${available.map((p) => `  ${p}`).join('\n')}`;
+          return `❌ File not found: ${path}\n\nAvailable files:\n${available.map((p) => `  ${p}`).join('\n')}`
         }
-        return content;
+        return content
       },
     }),
 
@@ -161,59 +167,59 @@ export function buildTools(callbacks: AiToolCallbacks) {
           .describe('Custom elevation in degrees (0=level, 90=top-down). Overrides view if set.'),
       }),
       execute: async ({ view, azimuth, elevation }) => {
-        const useOffscreen = view !== 'current' || azimuth !== undefined || elevation !== undefined;
+        const useOffscreen = view !== 'current' || azimuth !== undefined || elevation !== undefined
 
         if (!useOffscreen) {
-          const dataUrl = await callbacks.captureCurrentView();
+          const dataUrl = await callbacks.captureCurrentView()
           if (dataUrl) {
-            return { image_data_url: dataUrl };
+            return { image_data_url: dataUrl }
           }
           return {
             error:
               'No preview available. The code may not have been rendered yet, or the preview panel is not visible.',
-          };
+          }
         }
 
-        const stlUrl = callbacks.getStlBlobUrl();
+        const stlUrl = callbacks.getStlBlobUrl()
         if (!stlUrl) {
           return {
             error:
               'No 3D model available for angle-specific views. Render the code first, or use view="current" to capture the 2D SVG preview.',
-          };
+          }
         }
 
         try {
-          const opts: CaptureOptions = {};
+          const opts: CaptureOptions = {}
           if (azimuth !== undefined || elevation !== undefined) {
-            opts.azimuth = azimuth;
-            opts.elevation = elevation;
+            opts.azimuth = azimuth
+            opts.elevation = elevation
           } else if (view !== 'current') {
-            opts.view = view;
+            opts.view = view
           }
-          const dataUrl = await captureOffscreen(stlUrl, opts);
-          return { image_data_url: dataUrl };
+          const dataUrl = await captureOffscreen(stlUrl, opts)
+          return { image_data_url: dataUrl }
         } catch (err) {
           return {
             error: `Failed to capture screenshot: ${err instanceof Error ? err.message : String(err)}`,
-          };
+          }
         }
       },
       toModelOutput({ output }) {
         if (typeof output === 'object' && output !== null && 'image_data_url' in output) {
-          const dataUrl = (output as { image_data_url: string }).image_data_url;
-          const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+          const dataUrl = (output as { image_data_url: string }).image_data_url
+          const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
           return {
             type: 'content' as const,
             value: [
               { type: 'image-data' as const, data: base64, mediaType: 'image/png' },
               { type: 'text' as const, text: 'Screenshot captured successfully.' },
             ],
-          };
+          }
         }
         if (typeof output === 'object' && output !== null && 'error' in output) {
-          return { type: 'text' as const, value: (output as { error: string }).error };
+          return { type: 'text' as const, value: (output as { error: string }).error }
         }
-        return { type: 'text' as const, value: String(output) };
+        return { type: 'text' as const, value: String(output) }
       },
     }),
 
@@ -226,36 +232,36 @@ export function buildTools(callbacks: AiToolCallbacks) {
         rationale: z.string().describe('Human-readable explanation of the change'),
       }),
       execute: async ({ old_string, new_string, rationale }) => {
-        const currentCode = callbacks.getCurrentCode();
+        const currentCode = callbacks.getCurrentCode()
 
-        const occurrences = currentCode.split(old_string).length - 1;
+        const occurrences = currentCode.split(old_string).length - 1
         if (occurrences === 0) {
-          return `❌ Failed to apply edit: old_string not found in the code.\n\nRationale: ${rationale}\n\nThe edit was not applied. Please check the exact text and try again.`;
+          return `❌ Failed to apply edit: old_string not found in the code.\n\nRationale: ${rationale}\n\nThe edit was not applied. Please check the exact text and try again.`
         }
         if (occurrences > 1) {
-          return `❌ Failed to apply edit: old_string found ${occurrences} times. It must be unique.\n\nRationale: ${rationale}\n\nThe edit was not applied. Include more surrounding context to make old_string unique.`;
+          return `❌ Failed to apply edit: old_string found ${occurrences} times. It must be unique.\n\nRationale: ${rationale}\n\nThe edit was not applied. Include more surrounding context to make old_string unique.`
         }
 
-        const lineCount = new_string.split('\n').length;
+        const lineCount = new_string.split('\n').length
         if (lineCount > 120) {
-          return `❌ Failed to apply edit: replacement is ${lineCount} lines (max 120).\n\nRationale: ${rationale}\n\nBreak the change into smaller edits.`;
+          return `❌ Failed to apply edit: replacement is ${lineCount} lines (max 120).\n\nRationale: ${rationale}\n\nBreak the change into smaller edits.`
         }
 
-        const newCode = currentCode.replace(old_string, new_string);
+        const newCode = currentCode.replace(old_string, new_string)
 
-        const beforeResult = await RenderService.getInstance().checkSyntax(currentCode);
-        const afterResult = await RenderService.getInstance().checkSyntax(newCode);
+        const beforeResult = await RenderService.getInstance().checkSyntax(currentCode)
+        const afterResult = await RenderService.getInstance().checkSyntax(newCode)
 
-        const beforeErrors = beforeResult.diagnostics.filter((d) => d.severity === 'error').length;
-        const afterErrors = afterResult.diagnostics.filter((d) => d.severity === 'error').length;
+        const beforeErrors = beforeResult.diagnostics.filter((d) => d.severity === 'error').length
+        const afterErrors = afterResult.diagnostics.filter((d) => d.severity === 'error').length
 
         if (afterErrors > beforeErrors) {
           const errorMessages = afterResult.diagnostics
             .filter((d) => d.severity === 'error')
             .map((d) => `  [Error] (line ${d.line ?? '?'}): ${d.message}`)
-            .join('\n');
+            .join('\n')
 
-          return `❌ Failed to apply edit: introduces ${afterErrors - beforeErrors} new error(s).\n\nCompilation errors after applying edit:\n${errorMessages}\n\nRationale: ${rationale}\n\nThe edit was rolled back. No changes were made. Please fix the errors and try again.`;
+          return `❌ Failed to apply edit: introduces ${afterErrors - beforeErrors} new error(s).\n\nCompilation errors after applying edit:\n${errorMessages}\n\nRationale: ${rationale}\n\nThe edit was rolled back. No changes were made. Please fix the errors and try again.`
         }
 
         const checkpointId = historyService.createCheckpoint(
@@ -263,12 +269,12 @@ export function buildTools(callbacks: AiToolCallbacks) {
           [],
           `Before AI edit: ${rationale}`,
           'ai'
-        );
+        )
 
-        eventBus.emit('code-updated', { code: newCode });
+        eventBus.emit('code-updated', { code: newCode })
 
-        const checkpointSuffix = `\n[CHECKPOINT:${checkpointId}]`;
-        return `✅ Edit applied successfully!\n✅ Code compiles without new errors\n✅ Preview has been updated automatically\n\nRationale: ${rationale}\n\nThe changes are now live in the editor.${checkpointSuffix}`;
+        const checkpointSuffix = `\n[CHECKPOINT:${checkpointId}]`
+        return `✅ Edit applied successfully!\n✅ Code compiles without new errors\n✅ Preview has been updated automatically\n\nRationale: ${rationale}\n\nThe changes are now live in the editor.${checkpointSuffix}`
       },
     }),
 
@@ -276,23 +282,23 @@ export function buildTools(callbacks: AiToolCallbacks) {
       description: 'Get current OpenSCAD compilation errors and warnings',
       inputSchema: z.object({}),
       execute: async () => {
-        const currentCode = callbacks.getCurrentCode();
-        const result = await RenderService.getInstance().checkSyntax(currentCode);
+        const currentCode = callbacks.getCurrentCode()
+        const result = await RenderService.getInstance().checkSyntax(currentCode)
 
         if (result.diagnostics.length === 0) {
-          return '✅ No errors or warnings. The code compiles successfully.';
+          return '✅ No errors or warnings. The code compiles successfully.'
         }
 
         const formatted = result.diagnostics
           .map((d) => {
             const severity =
-              d.severity === 'error' ? 'Error' : d.severity === 'warning' ? 'Warning' : 'Info';
-            const location = d.line ? ` (line ${d.line}${d.col ? `, col ${d.col}` : ''})` : '';
-            return `[${severity}]${location}: ${d.message}`;
+              d.severity === 'error' ? 'Error' : d.severity === 'warning' ? 'Warning' : 'Info'
+            const location = d.line ? ` (line ${d.line}${d.col ? `, col ${d.col}` : ''})` : ''
+            return `[${severity}]${location}: ${d.message}`
           })
-          .join('\n');
+          .join('\n')
 
-        return `Current diagnostics:\n\n${formatted}`;
+        return `Current diagnostics:\n\n${formatted}`
       },
     }),
 
@@ -300,9 +306,9 @@ export function buildTools(callbacks: AiToolCallbacks) {
       description: 'Manually trigger a preview render',
       inputSchema: z.object({}),
       execute: async () => {
-        eventBus.emit('render-requested');
-        return '✅ Render triggered. Check the preview pane for the updated output.';
+        eventBus.emit('render-requested')
+        return '✅ Render triggered. Check the preview pane for the updated output.'
       },
     }),
-  };
+  }
 }
